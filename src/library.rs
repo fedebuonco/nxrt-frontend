@@ -44,8 +44,21 @@ pub struct Entry {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Library {
+    /// the player's keys file (prod.keys) the toolbar chose: used before one beside a package or in ~/.switch
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keys: Option<PathBuf>,
     #[serde(default, rename = "game")]
     pub games: Vec<Entry>,
+}
+
+/// A keys file that looks like one (prod.keys: has the header key). Err: why not.
+pub fn check_keys(p: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    if text.lines().any(|l| l.trim_start().starts_with("header_key")) {
+        Ok(())
+    } else {
+        Err(format!("{} has no header_key: not a prod.keys file", p.display()))
+    }
 }
 
 pub fn dir() -> PathBuf {

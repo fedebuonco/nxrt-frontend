@@ -164,8 +164,12 @@ impl Run {
 
     /// A setup step: Files / All from src (a folder, or an .nsp / .xci with prod.keys beside it; "" for All = only
     /// the game code), Generate and Compile on the files already set up. Hidden: no window.
-    pub fn setup(exe: &Path, data_root: Option<&Path>, stage: Stage, src: &str, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+    /// keys: the player's prod.keys for a package (NXRT_KEYS; None: the app looks beside it and in ~/.switch).
+    pub fn setup(exe: &Path, data_root: Option<&Path>, stage: Stage, src: &str, keys: Option<&Path>, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
         let mut c = command(exe, data_root);
+        if let Some(k) = keys {
+            c.env("NXRT_KEYS", k);
+        }
         match stage {
             Stage::Files => c.arg("--setup-files").arg(src),
             Stage::Generate => c.arg("--generate"),

@@ -167,6 +167,11 @@ struct App {
     icons: HashMap<String, Option<egui::TextureHandle>>,
 }
 
+/// The keys for a package: the toolbar's, else prod.keys beside it or in ~/.switch.
+fn keys_for(chosen: Option<&Path>, package: &Path) -> Option<PathBuf> {
+    chosen.filter(|k| k.is_file()).map(Path::to_path_buf).or_else(|| manage::find_keys(package))
+}
+
 impl App {
     fn new(cc: &eframe::CreationContext) -> App {
         let library = Library::load();
@@ -176,6 +181,17 @@ impl App {
         }
         let message = if manage::abi_ok() { String::new() } else { "libnxrt_manage: another ABI than this app's".into() };
         App { library, games, selected: 0, add: AddDialog::default(), message, icons: HashMap::new() }
+    }
+
+    fn pick_keys(&mut self) {
+        let Some(p) = rfd::FileDialog::new().set_title("Your Switch's keys file (prod.keys)").add_filter("Keys", &["keys"]).pick_file() else { return };
+        match library::check_keys(&p) {
+            Ok(()) => {
+                self.library.keys = Some(p);
+                self.save();
+            }
+            Err(e) => self.message = e,
+        }
     }
 
     fn save(&mut self) {
@@ -203,9 +219,10 @@ impl App {
 
     /// Add a Switch game from its package: what it is (its control data), and the nxrt app in the library that runs it.
     fn add_package(&mut self, ctx: &egui::Context, package: PathBuf) {
-        let keys = manage::find_keys(&package).or_else(|| {
-            rfd::FileDialog::new().set_title("Your Switch's keys file (prod.keys)").add_filter("Keys", &["keys"]).pick_file()
-        });
+        if keys_for(self.library.keys.as_deref(), &package).is_none() {
+            self.pick_keys();  // (none set, none beside the package: asked for once, then kept in the toolbar)
+        }
+        let keys = keys_for(self.library.keys.as_deref(), &package);
         let Some(keys) = keys else {
             self.message = "A game package is read with the keys from your own Switch (prod.keys): none chosen".into();
             return;
@@ -239,11 +256,12 @@ impl App {
         let c = ctx.clone();
         let repaint = move || c.request_repaint();
         let dr = g.entry.data_root.clone();
+        let keys = self.library.keys.clone().filter(|k| k.is_file()).or_else(|| g.entry.keys.clone());
         g.run_code_id = g.status().map(|s| s.code_id).unwrap_or_default();
         let r = match job {
             Job::Play => Run::game(&exe, dr.as_deref(), true, log_file, repaint),
             Job::StartScreen => Run::game(&exe, dr.as_deref(), false, log_file, repaint),
-            Job::Step(stage, src) => Run::setup(&exe, dr.as_deref(), stage, &src, log_file, repaint),
+            Job::Step(stage, src) => Run::setup(&exe, dr.as_deref(), stage, &src, keys.as_deref(), log_file, repaint),
             Job::DevBuild => match (&g.entry.build_dir, &g.entry.build_cmd) {
                 (Some(d), Some(cmd)) => Run::dev_build(cmd, d, log_file, repaint),
                 _ => Err("No Dev build command set".into()),
@@ -390,6 +408,23 @@ impl eframe::App for App {
                     for g in &self.games {
                         g.refresh(ctx);
                     }
+                }
+                ui.separator();
+                // the keys games are read with: the one chosen here, else each package's own (beside it, ~/.switch)
+                let home_keys = dirs::home_dir().map(|h| h.join(".switch/prod.keys")).filter(|p| p.is_file());
+                let (label, col, tip) = match (&self.library.keys, &home_keys) {
+                    (Some(k), _) if k.is_file() => (k.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), GREEN, k.display().to_string()),
+                    (Some(k), _) => ("missing".to_string(), RED, format!("{} is gone: choose it again", k.display())),
+                    (None, Some(h)) => ("~/.switch/prod.keys".into(), Color32::GRAY, format!("{} (none chosen: also prod.keys beside each package)", h.display())),
+                    (None, None) => ("beside each package".into(), AMBER, "No keys chosen: prod.keys beside each package is used".into()),
+                };
+                ui.label("Keys:");
+                if ui.button(RichText::new(label).color(col)).on_hover_text(format!("{tip}\n\nClick to choose your prod.keys")).clicked() {
+                    self.pick_keys();
+                }
+                if self.library.keys.is_some() && ui.small_button("x").on_hover_text("Forget the chosen keys").clicked() {
+                    self.library.keys = None;
+                    self.save();
                 }
                 if !self.message.is_empty() {
                     ui.separator();
@@ -859,7 +894,8 @@ fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
     let stage = match stage { "files" => Stage::Files, "generate" => Stage::Generate, "compile" => Stage::Compile, _ => Stage::All };
     let src = src.map(str::to_string).or_else(|| e.package.as_ref().map(|p| p.display().to_string())).unwrap_or_default();
     let code_id = runner::status(exe, e.data_root.as_deref()).map(|s| s.code_id).unwrap_or_default();
-    let mut r = match Run::setup(exe, e.data_root.as_deref(), stage, &src, None, || {}) {
+    let keys = lib.keys.clone().filter(|k| k.is_file()).or_else(|| e.keys.clone());
+    let mut r = match Run::setup(exe, e.data_root.as_deref(), stage, &src, keys.as_deref(), None, || {}) {
         Ok(r) => r,
         Err(err) => { eprintln!("{err}"); return 2; }
     };
@@ -890,6 +926,22 @@ fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
 
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    // --keys <prod.keys>: the keys games are read with (as the toolbar's Keys)
+    if let Some(i) = args.iter().position(|a| a == "--keys") {
+        let k = PathBuf::from(args.get(i + 1).map(String::as_str).unwrap_or(""));
+        if let Err(e) = library::check_keys(&k) {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        let mut lib = Library::load();
+        lib.keys = Some(k.clone());
+        if let Err(e) = lib.save() {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        println!("keys: {}", k.display());
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--list") {
         list();
         return Ok(());
@@ -905,7 +957,7 @@ fn main() -> eframe::Result<()> {
         let mut lib = Library::load();
         let is_pkg = what.extension().is_some_and(|e| e.eq_ignore_ascii_case("nsp") || e.eq_ignore_ascii_case("xci"));
         let msg = if is_pkg {
-            let Some(keys) = manage::find_keys(&what) else {
+            let Some(keys) = keys_for(lib.keys.as_deref(), &what) else {
                 eprintln!("no prod.keys beside the package or in ~/.switch");
                 std::process::exit(1);
             };

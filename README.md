@@ -27,8 +27,8 @@ Rust 1.85 works: generate the lockfile with
 ## Use
 
 1. **Add a Switch game...** (or drop its `.nsp` / `.xci` on the window): the manager reads what it is from the package
-   itself - name, publisher, version, icon, title id, game build - with your `prod.keys` (beside the package, or in
-   `~/.switch/`). It shows up in the library as that game.
+   itself - name, publisher, version, icon, title id, game build - with your `prod.keys`: the one chosen in the
+   toolbar (**Keys:**), else one beside the package or in `~/.switch/`. It shows up in the library as that game.
 2. The game's **nxrt app** (its recomp: `fe3hrecomp` ...) is matched by title id. If none is in the library yet, the game
    waits for it: **Add an nxrt app...** or **Choose its app...**.
 3. The steps to play it, each asked for when it is next:
@@ -44,6 +44,7 @@ From the command line:
 
 ```sh
 nxrt-frontend --add <package.nsp | app> [--data-root <dir>]   # add a Switch game, or an nxrt app
+nxrt-frontend --keys <prod.keys>                               # the keys games are read with (the toolbar's Keys)
 nxrt-frontend --list                                           # every game and its steps
 nxrt-frontend --step <title id | app id> files|generate|compile|all [src]
 ```
