@@ -55,6 +55,9 @@ nxrt-frontend --step <title id | app id> files|generate|compile|all [src]
 nxrt-frontend --create <title id> [--id <id>] [--dir <folder>]  # a new recomp of a game added from its package
 ```
 
+`NXRT_FRONTEND_SHOT=<file.png>` (with `NXRT_FRONTEND_VIEW=library|logs|settings|game:<n>`) saves the window as it
+looks after a moment and exits: screenshots for checks and docs.
+
 The library is `~/Library/Application Support/nxrt-frontend/library.toml` (`NXRT_FRONTEND_LIBRARY` overrides it), the
 games' icons beside it in `icons/`.
 

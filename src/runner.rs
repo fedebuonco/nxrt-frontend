@@ -22,6 +22,7 @@ pub struct Describe {
     #[serde(default)]
     pub version: String,
     #[serde(default)]
+    #[allow(dead_code)]  // (the app's own start-screen title)
     pub headline: String,
     #[serde(default)]
     pub gamelib_id: String,
