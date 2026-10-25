@@ -406,6 +406,47 @@ fn reveal(p: &Path) {
     let _ = std::process::Command::new("explorer").arg(p).spawn();
 }
 
+/// Shows a file in Finder (selected), or opens a folder.
+fn reveal_file(p: &Path) {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg("-R").arg(p).spawn();
+    #[cfg(not(target_os = "macos"))]
+    if let Some(d) = p.parent() {
+        reveal(d);
+    }
+}
+
+/// What each place a game uses is for (Where things are; the buttons' tooltips say the same)
+const ABOUT_PACKAGE: &str = "Your copy of the game (.nsp / .xci). Never changed: the game's data is read from it in place, \
+    so keep it where it is.";
+const ABOUT_KEYS: &str = "The keys from your own Switch (prod.keys). Needed to read the package; nothing is decrypted to disk.";
+const ABOUT_APP: &str = "The recomp's program: it runs this game (and does its setup steps). The manager starts it.";
+const ABOUT_RECOMP: &str = "The recomp the manager created for this game: its source (Makefile, runtime/<id>_game.c, \
+    tools/patches.py). Edit it to work on the port; build.sh rebuilds the app.";
+const ABOUT_DATA: &str = "Yours: the game's settings, saves and their backups, mods, and the shader cache. Back this folder up; \
+    deleting it loses your saves.";
+const ABOUT_GAME: &str = "Made from the package: the game's code files (exefs), a pointer to its data in the package \
+    (romfs.src), and the built game code (.gamebuild, the game's library). Safe to delete: the steps make it again.";
+const ABOUT_LOGS: &str = "A log of every run and step the manager started: what to send when something goes wrong.";
+
+/// One place of Where things are: its name, what it is, its path, and a button to show it.
+fn place(ui: &mut egui::Ui, name: &str, about: &str, path: &Path, is_file: bool) {
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.set_width(ui.available_width() - 70.0);
+            ui.label(RichText::new(name).strong());
+            ui.label(RichText::new(about).small().color(Color32::GRAY));
+            let exists = path.exists();
+            ui.label(RichText::new(format!("{}{}", path.display(), if exists { "" } else { "  (not there yet)" })).monospace().size(11.0)
+                .color(if exists { Color32::LIGHT_GRAY } else { AMBER }));
+        });
+        if ui.add_enabled(path.exists(), egui::Button::new(if is_file { "Show" } else { "Open" })).clicked() {
+            if is_file { reveal_file(path) } else { reveal(path) }
+        }
+    });
+    ui.add_space(6.0);
+}
+
 fn row(ui: &mut egui::Ui, k: &str, v: impl Into<egui::WidgetText>) {
     ui.label(RichText::new(k).color(Color32::GRAY));
     ui.label(v);
@@ -705,8 +746,8 @@ impl eframe::App for App {
                     });
                 }
                 if let Some(s) = &s {
-                    if ui.button("Data folder").clicked() { reveal(Path::new(&s.data_root)); }
-                    if ui.button("Game folder").clicked() { reveal(&game_dir(s)); }
+                    if ui.button("Data folder").on_hover_text(format!("Settings, saves, mods\n\n{ABOUT_DATA}")).clicked() { reveal(Path::new(&s.data_root)); }
+                    if ui.button("Game folder").on_hover_text(format!("Game files and built game code\n\n{ABOUT_GAME}")).clicked() { reveal(&game_dir(s)); }
                 }
                 if !busy && ui.button("Remove").on_hover_text("From this list only: nothing is deleted").clicked() {
                     action = Some(Action::Remove(sel));
@@ -714,10 +755,21 @@ impl eframe::App for App {
             });
             ui.add_space(6.0);
 
+            egui::CollapsingHeader::new("Where things are").default_open(true).show(ui, |ui| {
+                if let Some(p) = &g.entry.package { place(ui, "Game package", ABOUT_PACKAGE, p, true); }
+                let keys = self.library.keys.clone().filter(|k| k.is_file()).or_else(|| g.entry.keys.clone());
+                if let Some(k) = &keys { place(ui, "Keys", ABOUT_KEYS, k, true); }
+                if let Some(e) = &g.entry.exe { place(ui, "App", ABOUT_APP, e, true); }
+                if let Some(r) = &g.entry.recomp_dir { place(ui, "Recomp folder", ABOUT_RECOMP, r, false); }
+                if let Some(s) = &s {
+                    place(ui, "Data folder", ABOUT_DATA, Path::new(&s.data_root), false);
+                    place(ui, "Game folder", ABOUT_GAME, &game_dir(s), false);
+                }
+                place(ui, "Logs", ABOUT_LOGS, &library::dir().join("logs"), false);
+            });
+
             egui::CollapsingHeader::new("Details").default_open(false).show(ui, |ui| {
                 egui::Grid::new("details").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
-                    if let Some(p) = &g.entry.package { row(ui, "Package", p.display().to_string()); }
-                    if let Some(e) = &g.entry.exe { row(ui, "App", e.display().to_string()); }
                     if let Some(d) = &d {
                         row(ui, "App version", d.version.clone());
                         row(ui, "Game build", d.build_id.clone());
@@ -727,8 +779,6 @@ impl eframe::App for App {
                         row(ui, "App", RichText::new(e).color(RED));
                     }
                     if let Some(s) = &s {
-                        row(ui, "Data folder", s.data_root.clone());
-                        row(ui, "Game folder", game_dir(s).display().to_string());
                         if !s.files_ready { row(ui, "Game files", s.files.clone()); }
                         if !s.ready && !s.status.is_empty() { row(ui, "The app says", s.status.clone()); }
                         row(ui, "Game-code builder", if s.builder { "in the app" } else { "none (a dev build: Dev build below)" });
@@ -855,7 +905,8 @@ impl App {
                     }
                 });
                 ui.end_row();
-                ui.label("Folder");
+                ui.label("Folder").on_hover_text("The recomp's own folder: its source, its app (build/), and its data/ - the game files \
+                    set up from the package, the settings and saves");
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.create.dir).desired_width(420.0));
                     if ui.button("Browse...").clicked() {
@@ -865,7 +916,7 @@ impl App {
                     }
                 });
                 ui.end_row();
-                ui.label("nxrt");
+                ui.label("nxrt").on_hover_text("The nxrt checkout the recomp builds against: the shared runtime and the recompiler");
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.create.nxrt).desired_width(420.0));
                     if ui.button("Browse...").clicked() {
@@ -962,7 +1013,8 @@ impl App {
                 }
             });
             ui.add_space(4.0);
-            ui.label("Its data folder (settings, saves): leave empty for the app's own.");
+            ui.label("Its data folder: the game's settings, saves, mods (and by default its game files). Leave empty for the \
+                app's own, as when you start the app by itself.");
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.add.data_root).desired_width(380.0).hint_text("default"));
                 if ui.button("Browse...").clicked() {
