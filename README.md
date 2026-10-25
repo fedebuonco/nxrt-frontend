@@ -26,19 +26,42 @@ Rust 1.85 works: generate the lockfile with
 
 ## Use
 
-- **Add game...**: pick a game's app, and optionally its data folder (empty: the app's own default).
-- **Play** boots the game (`--play`); **Start screen** opens the game's own start screen (its settings, game-files
-  setup).
-- Each run's log is shown live and kept in `~/Library/Application Support/nxrt-frontend/logs/`.
+1. **Add a Switch game...** (or drop its `.nsp` / `.xci` on the window): the manager reads what it is from the package
+   itself - name, publisher, version, icon, title id, game build - with your `prod.keys` (beside the package, or in
+   `~/.switch/`). It shows up in the library as that game.
+2. The game's **nxrt app** (its recomp: `fe3hrecomp` ...) is matched by title id. If none is in the library yet, the game
+   waits for it: **Add an nxrt app...** or **Choose its app...**.
+3. The steps to play it, each asked for when it is next:
+   - **Game files**: set up from the package (seconds: the package is read in place, nothing is copied);
+   - **Generate the game code**: the game's ARM code translated to C (`<app> --generate`);
+   - **Compile the game code**: that C compiled into the game's library (`<app> --compile`, reusing what was
+     generated).
+4. **Play** (`--play`); **Start screen** opens the game's own start screen (its settings and controls).
+
+Each run's log is shown live and kept in `~/Library/Application Support/nxrt-frontend/logs/`.
 
 From the command line:
 
 ```sh
-nxrt-frontend --add <runner> [--data-root <dir>]   # add a game
-nxrt-frontend --list                               # every game and how it stands
+nxrt-frontend --add <package.nsp | app> [--data-root <dir>]   # add a Switch game, or an nxrt app
+nxrt-frontend --list                                           # every game and its steps
+nxrt-frontend --step <title id | app id> files|generate|compile|all [src]
 ```
 
-The library is `~/Library/Application Support/nxrt-frontend/library.toml` (`NXRT_FRONTEND_LIBRARY` overrides it).
+The library is `~/Library/Application Support/nxrt-frontend/library.toml` (`NXRT_FRONTEND_LIBRARY` overrides it), the
+games' icons beside it in `icons/`.
+
+### What the apps answer
+
+| Flag | What |
+|---|---|
+| `--describe` | the game the app runs (JSON) |
+| `--status` | its data folder, game folder, whether files and game code are ready (JSON) |
+| `--setup-files <pkg or folder>` | the game files only |
+| `--generate` / `--compile` | the game code: C from the game's code / the library from that C |
+| `--setup <pkg or folder>` | all of it |
+
+The steps print `{"nxrt_progress":1,...}` lines and one `{"nxrt_setup":1,...}` result on stdout.
 
 ## Roadmap
 

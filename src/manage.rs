@@ -19,7 +19,22 @@ struct NxmRomfs {
     _opaque: [u8; 0],
 }
 
+#[repr(C)]
+struct NxmPackage {
+    title_id: u64,
+    build_id: [u8; 8],
+    has_build_id: bool,
+    name: [c_char; 0x201],
+    publisher: [c_char; 0x101],
+    version: [c_char; 0x11],
+    icon: *mut u8,
+    icon_size: usize,
+}
+
 extern "C" {
+    fn nxm_package_info(package: *const c_char, keys: *const c_char, out: *mut NxmPackage, why: *mut c_char, why_size: usize) -> bool;
+    fn nxm_package_free(p: *mut NxmPackage);
+    fn nxm_find_keys(package: *const c_char, out: *mut c_char, out_size: usize) -> bool;
     fn nxm_abi() -> c_int;
     fn nxm_game_files(game_dir: *const c_char, out: *mut NxmGameFiles) -> bool;
     fn nxm_romfs_open(game_dir: *const c_char, why: *mut c_char, why_size: usize) -> *mut NxmRomfs;
@@ -92,4 +107,49 @@ pub fn romfs_summary(dir: &Path) -> Result<RomfsSummary, String> {
         return Err("the game data couldn't be read".into());
     }
     Ok(s)
+}
+
+/// What a game package (.nsp / .xci) is: read from its headers and control data, without setting it up.
+#[derive(Clone, Debug, Default)]
+pub struct Package {
+    pub title_id: String,
+    /// exefs/main's build id: which version of the game
+    pub build_id: Option<String>,
+    pub name: String,
+    pub publisher: String,
+    pub version: String,
+    /// the game's icon, a JPEG
+    pub icon: Option<Vec<u8>>,
+}
+
+fn cstr(b: &[c_char]) -> String {
+    unsafe { CStr::from_ptr(b.as_ptr()) }.to_string_lossy().into_owned()
+}
+
+/// The keys file for a package: prod.keys beside it, else ~/.switch/prod.keys.
+pub fn find_keys(package: &Path) -> Option<std::path::PathBuf> {
+    let c = cpath(package)?;
+    let mut out = [0 as c_char; 1200];
+    unsafe { nxm_find_keys(c.as_ptr(), out.as_mut_ptr(), out.len()) }.then(|| cstr(&out).into())
+}
+
+pub fn package_info(package: &Path, keys: &Path) -> Result<Package, String> {
+    let (p, k) = (cpath(package).ok_or("bad path")?, cpath(keys).ok_or("bad path")?);
+    let mut out: NxmPackage = unsafe { std::mem::zeroed() };
+    let mut why = [0 as c_char; 256];
+    if !unsafe { nxm_package_info(p.as_ptr(), k.as_ptr(), &mut out, why.as_mut_ptr(), why.len()) } {
+        return Err(cstr(&why));
+    }
+    let icon = (!out.icon.is_null() && out.icon_size > 0)
+        .then(|| unsafe { std::slice::from_raw_parts(out.icon, out.icon_size) }.to_vec());
+    let r = Package {
+        title_id: format!("{:016x}", out.title_id),
+        build_id: out.has_build_id.then(|| out.build_id.iter().map(|b| format!("{b:02x}")).collect()),
+        name: cstr(&out.name),
+        publisher: cstr(&out.publisher),
+        version: cstr(&out.version),
+        icon,
+    };
+    unsafe { nxm_package_free(&mut out) };
+    Ok(r)
 }

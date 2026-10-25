@@ -89,38 +89,114 @@ fn push(log: &Log, line: String) {
     l.push_back(line);
 }
 
-/// A running game.
+/// What a run is doing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Kind {
+    /// the game (or its own start screen)
+    Game,
+    /// a setup step done by the app (`--setup-files`, `--generate`, `--compile`, `--setup`)
+    Setup(Stage),
+    /// a dev build command (make gen + the game library): an app without a bundled builder
+    DevBuild,
+}
+
+/// The steps from a game package to a game that plays (runtime/rt_ui.mm rt_run_setup).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Stage {
+    /// the game files from a package or folder (seconds: a package is read in place)
+    Files,
+    /// the game's code translated to C, kept for the compile (minutes)
+    Generate,
+    /// the C compiled into the game's library (minutes)
+    Compile,
+    /// all of it at once
+    All,
+}
+
+/// `--setup`'s result line (runtime/rt_ui.mm rt_run_setup)
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SetupResult {
+    pub ok: bool,
+    #[serde(default)]
+    pub builder: bool,
+    #[serde(default)]
+    pub step: String,
+    #[serde(default)]
+    pub hint: String,
+    #[serde(default)]
+    pub status: String,
+}
+
+#[derive(Deserialize)]
+struct ProgressLine {
+    fraction: f32,
+    step: String,
+}
+
+/// How far a setup or build is (from its progress lines), and its result once it has one.
+#[derive(Clone, Debug, Default)]
+pub struct Progress {
+    pub fraction: Option<f32>,
+    pub step: String,
+    pub result: Option<SetupResult>,
+}
+
+/// A running game, setup or build.
 pub struct Run {
     child: Child,
+    pub kind: Kind,
     pub log: Log,
+    pub progress: Arc<Mutex<Progress>>,
     /// where the whole log is also written
     pub log_file: Option<PathBuf>,
 }
 
 impl Run {
-    /// Starts the runner: `--play` boots straight into the game (the manager is the start screen), without it the
-    /// app's own start screen comes up (its settings, setup).
-    pub fn start(
-        exe: &Path,
-        data_root: Option<&Path>,
-        play: bool,
-        log_file: Option<PathBuf>,
-        repaint: impl Fn() + Send + Sync + 'static,
-    ) -> Result<Run, String> {
+    /// The game: `--play` boots straight into it (the manager is the start screen), without it the app's own start
+    /// screen comes up (its settings, setup).
+    pub fn game(exe: &Path, data_root: Option<&Path>, play: bool, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
         let mut c = command(exe, data_root);
         if play {
             c.arg("--play");
         }
-        if let Some(dir) = exe.parent() {
-            c.current_dir(dir);
+        Run::spawn(c, exe, Kind::Game, log_file, repaint)
+    }
+
+    /// A setup step: Files / All from src (a folder, or an .nsp / .xci with prod.keys beside it; "" for All = only
+    /// the game code), Generate and Compile on the files already set up. Hidden: no window.
+    pub fn setup(exe: &Path, data_root: Option<&Path>, stage: Stage, src: &str, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+        let mut c = command(exe, data_root);
+        match stage {
+            Stage::Files => c.arg("--setup-files").arg(src),
+            Stage::Generate => c.arg("--generate"),
+            Stage::Compile => c.arg("--compile"),
+            Stage::All => c.arg("--setup").arg(src),
+        };
+        c.env("NXRT_HIDDEN", "1");
+        Run::spawn(c, exe, Kind::Setup(stage), log_file, repaint)
+    }
+
+    /// A shell command in dir (a game's source checkout: `make gen` and the game library).
+    pub fn dev_build(cmd: &str, dir: &Path, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+        let mut c = Command::new("/bin/sh");
+        c.arg("-c").arg(cmd).current_dir(dir);
+        Run::spawn(c, dir, Kind::DevBuild, log_file, repaint)
+    }
+
+    fn spawn(mut c: Command, what: &Path, kind: Kind, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+        if kind != Kind::DevBuild {
+            if let Some(dir) = what.parent() {
+                c.current_dir(dir);
+            }
         }
         let mut child = c
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("can't start {}: {e}", exe.display()))?;
+            .map_err(|e| format!("can't start {}: {e}", what.display()))?;
         let log: Log = Arc::new(Mutex::new(VecDeque::new()));
+        let progress: Arc<Mutex<Progress>> = Default::default();
         let file = log_file.as_ref().and_then(|p| std::fs::File::create(p).ok()).map(|f| Arc::new(Mutex::new(f)));
         let repaint = Arc::new(repaint);
         let streams: Vec<Box<dyn std::io::Read + Send>> = vec![
@@ -128,19 +204,36 @@ impl Run {
             Box::new(child.stderr.take().unwrap()),
         ];
         for s in streams {
-            let (log, file, repaint) = (log.clone(), file.clone(), repaint.clone());
+            let (log, file, repaint, progress) = (log.clone(), file.clone(), repaint.clone(), progress.clone());
             std::thread::spawn(move || {
                 for line in BufReader::new(s).lines().map_while(Result::ok) {
                     if let Some(f) = &file {
                         use std::io::Write;
                         let _ = writeln!(f.lock().unwrap(), "{line}");
                     }
-                    push(&log, line);
+                    if matches!(kind, Kind::Setup(_)) && line.starts_with("{\"nxrt_progress\"") {
+                        if let Ok(p) = serde_json::from_str::<ProgressLine>(&line) {
+                            let mut g = progress.lock().unwrap();
+                            g.fraction = Some(p.fraction);
+                            if !p.step.is_empty() {
+                                g.step = p.step;
+                            }
+                        }
+                    } else if matches!(kind, Kind::Setup(_)) && line.starts_with("{\"nxrt_setup\"") {
+                        if let Ok(r) = serde_json::from_str::<SetupResult>(&line) {
+                            progress.lock().unwrap().result = Some(r);
+                        }
+                    } else {
+                        if kind == Kind::DevBuild {
+                            progress.lock().unwrap().step = line.chars().take(120).collect();
+                        }
+                        push(&log, line);
+                    }
                     repaint();
                 }
             });
         }
-        Ok(Run { child, log, log_file })
+        Ok(Run { child, kind, log, progress, log_file })
     }
 
     /// None while it runs, else how it ended.
