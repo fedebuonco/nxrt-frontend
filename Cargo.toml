@@ -1,0 +1,21 @@
+[package]
+name = "nxrt-frontend"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "A manager for nxrt Switch recomps: one library of games, their files and game code, Play"
+publish = false
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+dirs = "5"
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+lto = "thin"
