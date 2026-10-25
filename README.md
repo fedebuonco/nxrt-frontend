@@ -31,6 +31,11 @@ Rust 1.85 works: generate the lockfile with
    toolbar (**Keys:**), else one beside the package or in `~/.switch/`. It shows up in the library as that game.
 2. The game's **nxrt app** (its recomp: `fe3hrecomp` ...) is matched by title id. If none is in the library yet, the game
    waits for it: **Add an nxrt app...** or **Choose its app...**.
+   No recomp for it at all? **Create a recomp...** makes one from the package: an nxrt game folder (its Makefile
+   with the code modules laid out from the NSOs' sizes, `runtime/<id>_game.c` with who the game is, `build.sh`), its
+   game files set up in its `data/` folder, and its app built (the generator's Python environment, then `make`). A
+   plain recompilation, nothing game-specific yet: a port starts from there. Needs the Xcode command line tools,
+   Python 3, Homebrew's SDL3 and FFmpeg, and an nxrt checkout (default: this app's own submodule).
 3. The steps to play it, each asked for when it is next:
    - **Game files**: set up from the package (seconds: the package is read in place, nothing is copied);
    - **Generate the game code**: the game's ARM code translated to C (`<app> --generate`);
@@ -47,6 +52,7 @@ nxrt-frontend --add <package.nsp | app> [--data-root <dir>]   # add a Switch gam
 nxrt-frontend --keys <prod.keys>                               # the keys games are read with (the toolbar's Keys)
 nxrt-frontend --list                                           # every game and its steps
 nxrt-frontend --step <title id | app id> files|generate|compile|all [src]
+nxrt-frontend --create <title id> [--id <id>] [--dir <folder>]  # a new recomp of a game added from its package
 ```
 
 The library is `~/Library/Application Support/nxrt-frontend/library.toml` (`NXRT_FRONTEND_LIBRARY` overrides it), the

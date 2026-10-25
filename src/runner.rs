@@ -98,6 +98,8 @@ pub enum Kind {
     Setup(Stage),
     /// a dev build command (make gen + the game library): an app without a bundled builder
     DevBuild,
+    /// a new recomp's app being built (its build.sh: ::step lines)
+    Create,
 }
 
 /// The steps from a game package to a game that plays (runtime/rt_ui.mm rt_run_setup).
@@ -187,8 +189,15 @@ impl Run {
         Run::spawn(c, dir, Kind::DevBuild, log_file, repaint)
     }
 
+    /// A new recomp's build (recomp.rs: its build.sh), in its folder.
+    pub fn create(dir: &Path, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+        let mut c = Command::new("/bin/sh");
+        c.arg("build.sh").current_dir(dir);
+        Run::spawn(c, dir, Kind::Create, log_file, repaint)
+    }
+
     fn spawn(mut c: Command, what: &Path, kind: Kind, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
-        if kind != Kind::DevBuild {
+        if kind != Kind::DevBuild && kind != Kind::Create {
             if let Some(dir) = what.parent() {
                 c.current_dir(dir);
             }
@@ -227,6 +236,8 @@ impl Run {
                         if let Ok(r) = serde_json::from_str::<SetupResult>(&line) {
                             progress.lock().unwrap().result = Some(r);
                         }
+                    } else if kind == Kind::Create && line.starts_with("::step ") {
+                        progress.lock().unwrap().step = line[7..].to_string();
                     } else {
                         if kind == Kind::DevBuild {
                             progress.lock().unwrap().step = line.chars().take(120).collect();

@@ -8,6 +8,7 @@
 //! libnxrt_manage (manage.rs). The manager never edits a game's settings or saves: the game's app owns them.
 mod library;
 mod manage;
+mod recomp;
 mod runner;
 
 use eframe::egui::{self, Color32, RichText};
@@ -60,13 +61,15 @@ struct Game {
     last_exit: Option<(String, bool)>,
     edit_dir: String,
     edit_cmd: String,
+    /// a recomp being made for it: the app its build makes, and its data folder
+    creating: Option<(PathBuf, PathBuf)>,
 }
 
 impl Game {
     fn new(entry: Entry) -> Game {
         let edit_dir = entry.build_dir.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
         let edit_cmd = entry.build_cmd.clone().unwrap_or_default();
-        Game { entry, info: Default::default(), loading: Default::default(), run: None, run_code_id: String::new(), last_exit: None, edit_dir, edit_cmd }
+        Game { entry, info: Default::default(), loading: Default::default(), run: None, run_code_id: String::new(), last_exit: None, edit_dir, edit_cmd, creating: None }
     }
 
     fn refresh(&self, ctx: &egui::Context) {
@@ -141,6 +144,37 @@ enum Action {
     Remove(usize),
     SaveDev(usize),
     ChooseApp(usize),
+    CreateRecomp(usize),
+}
+
+#[derive(Default)]
+struct CreateDialog {
+    open: bool,
+    game: usize,
+    id: String,
+    dir: String,
+    nxrt: String,
+    error: String,
+}
+
+/// A new recomp for a game added from its package (recomp.rs): its game files set up from the package into
+/// <dir>/data/extracted, its folder written. Its app is built next (Run::create).
+fn create_recomp(e: &Entry, id: &str, dir: &Path, nxrt: &Path, keys: &Path) -> Result<(), String> {
+    if !recomp::valid_id(id) {
+        return Err("The id is a short name in lower-case letters and digits (it names the app: <id>recomp)".into());
+    }
+    if !nxrt.join("nxrt.mk").is_file() {
+        return Err(format!("{}: not an nxrt checkout (no nxrt.mk)", nxrt.display()));
+    }
+    let Some(pkg) = &e.package else { return Err("No package for this game".into()) };
+    if dir.join("Makefile").exists() {
+        return Err(format!("{} already has a recomp", dir.display()));
+    }
+    let files = dir.join("data").join("extracted");
+    std::fs::create_dir_all(&files).map_err(|err| format!("{}: {err}", files.display()))?;
+    manage::package_setup(pkg, keys, &files)?;
+    let modules = recomp::layout(&files.join("exefs"))?;
+    recomp::scaffold(dir, id, e, &modules, nxrt)
 }
 
 enum Job {
@@ -165,6 +199,7 @@ struct App {
     add: AddDialog,
     message: String,
     icons: HashMap<String, Option<egui::TextureHandle>>,
+    create: CreateDialog,
 }
 
 /// The keys for a package: the toolbar's, else prod.keys beside it or in ~/.switch.
@@ -180,7 +215,7 @@ impl App {
             g.refresh(&cc.egui_ctx);
         }
         let message = if manage::abi_ok() { String::new() } else { "libnxrt_manage: another ABI than this app's".into() };
-        App { library, games, selected: 0, add: AddDialog::default(), message, icons: HashMap::new() }
+        App { library, games, selected: 0, add: AddDialog::default(), message, icons: HashMap::new(), create: CreateDialog::default() }
     }
 
     fn pick_keys(&mut self) {
@@ -302,6 +337,15 @@ impl App {
                 }
                 (Kind::Setup(_), None) => (format!("The step {how}"), false),
                 (Kind::DevBuild, _) => (format!("Dev build {}", if how == "closed" { "finished" } else { how.as_str() }), how == "closed"),
+                (Kind::Create, _) => match g.creating.take() {
+                    Some((app, data)) if how == "closed" && app.is_file() => {
+                        g.entry.exe = Some(app);
+                        g.entry.data_root = Some(data);
+                        changed = true;
+                        ("Recomp created: next, generate its game code".into(), true)
+                    }
+                    _ => (format!("Creating the recomp failed ({how}): see the log in the logs folder"), false),
+                },
                 (Kind::Game, _) => (format!("Last run: {how}"), how == "closed"),
             };
             g.last_exit = Some((text, ok));
@@ -503,9 +547,31 @@ impl eframe::App for App {
 
             // ---- no app for it yet
             if g.entry.exe.is_none() {
-                ui.label("This game has no nxrt app in the library yet. Add the recomp's app (for example fe3hrecomp), \
-                          or choose it here:");
+                if let Some((progress, log)) = g.run.as_ref().map(|r| (r.progress.clone(), r.log.clone())) {
+                    let p = progress.lock().unwrap().clone();
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(RichText::new(if p.step.is_empty() { "Creating its recomp...".to_string() } else { p.step }).strong());
+                    });
+                    if ui.button("Cancel").clicked() {
+                        if let Some(r) = &mut g.run { r.stop(); }
+                    }
+                    let lines = log.lock().unwrap();
+                    egui::ScrollArea::vertical().stick_to_bottom(true).auto_shrink([false, false]).show_rows(ui, 14.0, lines.len(), |ui, range| {
+                        for l in lines.range(range) {
+                            ui.label(RichText::new(l).monospace().size(11.0));
+                        }
+                    });
+                    return;
+                }
+                ui.label("No nxrt app runs this game yet. If its recomp exists, add its app (Add an nxrt app, or Choose \
+                          its app). Otherwise make one: a new recomp of this game from its package - a plain recompilation \
+                          to start a port from.");
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    if g.entry.package.is_some() && ui.button(RichText::new("Create a recomp...").strong()).clicked() {
+                        action = Some(Action::CreateRecomp(sel));
+                    }
                     if ui.button("Choose its app...").clicked() {
                         action = Some(Action::ChooseApp(sel));
                     }
@@ -513,6 +579,9 @@ impl eframe::App for App {
                         action = Some(Action::Remove(sel));
                     }
                 });
+                if let Some((text, ok)) = &g.last_exit {
+                    ui.colored_label(if *ok { GREEN } else { RED }, text);
+                }
                 return;
             }
             if let Some(d) = &d {
@@ -735,10 +804,22 @@ impl eframe::App for App {
                 self.save();
             }
             Some(Action::ChooseApp(i)) => self.choose_app(ctx, i),
+            Some(Action::CreateRecomp(i)) => {
+                let id = recomp::default_id(&self.games[i].entry.name);
+                self.create = CreateDialog {
+                    open: true,
+                    game: i,
+                    dir: recomp::default_dir(&id).display().to_string(),
+                    id,
+                    nxrt: recomp::default_nxrt().display().to_string(),
+                    error: String::new(),
+                };
+            }
             None => {}
         }
 
         self.add_dialog(ctx);
+        self.create_dialog(ctx);
 
         // (a package dropped on the window: added)
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
@@ -751,6 +832,91 @@ impl eframe::App for App {
 }
 
 impl App {
+    fn create_dialog(&mut self, ctx: &egui::Context) {
+        if !self.create.open {
+            return;
+        }
+        let i = self.create.game;
+        let Some(name) = self.games.get(i).map(|g| g.title()) else { self.create.open = false; return };
+        let mut open = true;
+        let mut go = false;
+        egui::Window::new(format!("Create a recomp of {name}")).collapsible(false).resizable(false).open(&mut open).show(ctx, |ui| {
+            ui.label(RichText::new("A new nxrt game folder from the game's package: who it is, its code modules, its game files \
+                (read from the package in place), and its app built. Then generate and compile its game code as for any \
+                game. A plain recompilation: a port starts from here.").color(Color32::GRAY));
+            ui.add_space(6.0);
+            egui::Grid::new("create").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                ui.label("Id");
+                ui.horizontal(|ui| {
+                    let r = ui.add(egui::TextEdit::singleline(&mut self.create.id).desired_width(140.0));
+                    ui.label(RichText::new(format!("the app: {}recomp", self.create.id)).color(Color32::GRAY));
+                    if r.changed() {
+                        self.create.dir = recomp::default_dir(&self.create.id).display().to_string();
+                    }
+                });
+                ui.end_row();
+                ui.label("Folder");
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut self.create.dir).desired_width(420.0));
+                    if ui.button("Browse...").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().set_title("Where the recomp goes (a folder for it is made there)").pick_folder() {
+                            self.create.dir = p.join(&self.create.id).display().to_string();
+                        }
+                    }
+                });
+                ui.end_row();
+                ui.label("nxrt");
+                ui.horizontal(|ui| {
+                    ui.add(egui::TextEdit::singleline(&mut self.create.nxrt).desired_width(420.0));
+                    if ui.button("Browse...").clicked() {
+                        if let Some(p) = rfd::FileDialog::new().set_title("The nxrt checkout").pick_folder() {
+                            self.create.nxrt = p.display().to_string();
+                        }
+                    }
+                });
+                ui.end_row();
+            });
+            ui.label(RichText::new("Needs: the Xcode command line tools, Python 3, Homebrew's SDL3 and FFmpeg. The app builds in a \
+                minute or two; its game code is the next steps.").small().color(Color32::GRAY));
+            if !self.create.error.is_empty() {
+                ui.colored_label(RED, &self.create.error);
+            }
+            ui.add_space(6.0);
+            go = ui.button(RichText::new("Create").strong()).clicked();
+        });
+        if !open {
+            self.create.open = false;
+        }
+        if !go {
+            return;
+        }
+        let (id, dir, nxrt) = (self.create.id.trim().to_string(), PathBuf::from(self.create.dir.trim()), PathBuf::from(self.create.nxrt.trim()));
+        let e = self.games[i].entry.clone();
+        let Some(keys) = self.library.keys.clone().filter(|k| k.is_file()).or_else(|| e.keys.clone()) else {
+            self.create.error = "No keys: choose your prod.keys in the toolbar".into();
+            return;
+        };
+        if let Err(err) = create_recomp(&e, &id, &dir, &nxrt, &keys) {
+            self.create.error = err;
+            return;
+        }
+        let logs = library::dir().join("logs");
+        let _ = std::fs::create_dir_all(&logs);
+        let c = ctx.clone();
+        match Run::create(&dir, Some(logs.join(format!("{id}-create.log"))), move || c.request_repaint()) {
+            Ok(r) => {
+                let g = &mut self.games[i];
+                g.entry.recomp_dir = Some(dir.clone());
+                g.creating = Some((recomp::app_path(&dir, &id), dir.join("data")));
+                g.run = Some(r);
+                g.last_exit = None;
+                self.create.open = false;
+                self.save();
+            }
+            Err(err) => self.create.error = err,
+        }
+    }
+
     /// The nxrt app for a game added from its package: it must run that title.
     fn choose_app(&mut self, ctx: &egui::Context, i: usize) {
         let Some(p) = rfd::FileDialog::new().set_title("The game's nxrt app").pick_file() else { return };
@@ -940,6 +1106,46 @@ fn main() -> eframe::Result<()> {
             std::process::exit(1);
         }
         println!("keys: {}", k.display());
+        return Ok(());
+    }
+    // --create <title id> [--id <id>] [--dir <folder>]: a new recomp of a game added from its package, its app built
+    if let Some(i) = args.iter().position(|a| a == "--create") {
+        let who = args.get(i + 1).cloned().unwrap_or_default();
+        let opt = |k: &str| args.iter().position(|a| a == k).and_then(|j| args.get(j + 1)).cloned();
+        let mut lib = Library::load();
+        let Some(gi) = lib.games.iter().position(|e| e.title_id.eq_ignore_ascii_case(&who)) else {
+            eprintln!("{who}: not in the library");
+            std::process::exit(2);
+        };
+        let e = lib.games[gi].clone();
+        let id = opt("--id").unwrap_or_else(|| recomp::default_id(&e.name));
+        let dir = opt("--dir").map(PathBuf::from).unwrap_or_else(|| recomp::default_dir(&id));
+        let keys = lib.keys.clone().filter(|k| k.is_file()).or(e.keys.clone()).unwrap_or_default();
+        if let Err(err) = create_recomp(&e, &id, &dir, &recomp::default_nxrt(), &keys) {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+        println!("{}: recomp at {} (modules in its Makefile); building its app...", e.name, dir.display());
+        let mut r = Run::create(&dir, None, || {}).unwrap_or_else(|err| { eprintln!("{err}"); std::process::exit(1) });
+        let mut last = String::new();
+        let how = loop {
+            if let Some(how) = r.exited() { break how; }
+            let st = r.progress.lock().unwrap().step.clone();
+            if st != last { println!("{st}"); last = st; }
+            std::thread::sleep(Duration::from_millis(500));
+        };
+        let app = recomp::app_path(&dir, &id);
+        if how != "closed" || !app.is_file() {
+            for l in r.log.lock().unwrap().iter().rev().take(15).collect::<Vec<_>>().into_iter().rev() { eprintln!("  {l}"); }
+            eprintln!("the build {how}");
+            std::process::exit(1);
+        }
+        let g = &mut lib.games[gi];
+        g.exe = Some(app.clone());
+        g.data_root = Some(dir.join("data"));
+        g.recomp_dir = Some(dir);
+        if let Err(err) = lib.save() { eprintln!("{err}"); std::process::exit(1); }
+        println!("app: {} - next: --step {who} generate, then compile", app.display());
         return Ok(());
     }
     if args.iter().any(|a| a == "--list") {

@@ -35,6 +35,10 @@ pub struct Entry {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub generated_for: String,
 
+    /// a recomp nxrt-frontend made for this game (recomp.rs): its folder
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recomp_dir: Option<PathBuf>,
+
     /// an app built from source without a game-code builder: the command that builds its game code, run in build_dir
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_dir: Option<PathBuf>,

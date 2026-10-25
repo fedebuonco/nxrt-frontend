@@ -35,6 +35,7 @@ extern "C" {
     fn nxm_package_info(package: *const c_char, keys: *const c_char, out: *mut NxmPackage, why: *mut c_char, why_size: usize) -> bool;
     fn nxm_package_free(p: *mut NxmPackage);
     fn nxm_find_keys(package: *const c_char, out: *mut c_char, out_size: usize) -> bool;
+    fn nxm_package_setup(package: *const c_char, keys: *const c_char, out_dir: *const c_char, title_id: *mut u64, why: *mut c_char, why_size: usize) -> bool;
     fn nxm_abi() -> c_int;
     fn nxm_game_files(game_dir: *const c_char, out: *mut NxmGameFiles) -> bool;
     fn nxm_romfs_open(game_dir: *const c_char, why: *mut c_char, why_size: usize) -> *mut NxmRomfs;
@@ -131,6 +132,19 @@ pub fn find_keys(package: &Path) -> Option<std::path::PathBuf> {
     let c = cpath(package)?;
     let mut out = [0 as c_char; 1200];
     unsafe { nxm_find_keys(c.as_ptr(), out.as_mut_ptr(), out.len()) }.then(|| cstr(&out).into())
+}
+
+/// A game folder set up from a package: its ExeFS written to <out_dir>/exefs, its RomFS described in
+/// <out_dir>/romfs.src (read from the package in place). Seconds.
+pub fn package_setup(package: &Path, keys: &Path, out_dir: &Path) -> Result<(), String> {
+    let (p, k, o) = (cpath(package).ok_or("bad path")?, cpath(keys).ok_or("bad path")?, cpath(out_dir).ok_or("bad path")?);
+    let mut why = [0 as c_char; 256];
+    let mut tid = 0u64;
+    if unsafe { nxm_package_setup(p.as_ptr(), k.as_ptr(), o.as_ptr(), &mut tid, why.as_mut_ptr(), why.len()) } {
+        Ok(())
+    } else {
+        Err(cstr(&why))
+    }
 }
 
 pub fn package_info(package: &Path, keys: &Path) -> Result<Package, String> {
