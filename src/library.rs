@@ -19,6 +19,9 @@ pub struct Entry {
     pub package: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keys: Option<PathBuf>,
+    /// the game's update (an .nsp), played with the base package: its code, and its changes to the game's data
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<PathBuf>,
     /// what the package is (its control data): shown before an app is found
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title_id: String,

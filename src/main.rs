@@ -279,6 +279,7 @@ enum Action {
     ChooseApp(usize),
     CreateRecomp(usize),
     Open(usize),
+    AddBase(usize),
     AddPackage,
     AddApp,
 }
@@ -302,13 +303,15 @@ fn create_recomp(e: &Entry, id: &str, dir: &Path, nxrt: &Path, keys: &Path) -> R
     if !nxrt.join("nxrt.mk").is_file() {
         return Err(format!("{}: not an nxrt checkout (no nxrt.mk)", nxrt.display()));
     }
-    let Some(pkg) = &e.package else { return Err("No package for this game".into()) };
+    let Some(pkg) = &e.package else {
+        return Err(if e.update.is_some() { "This is the game's update: add its base game first".into() } else { "No package for this game".into() });
+    };
     if dir.join("Makefile").exists() {
         return Err(format!("{} already has a recomp", dir.display()));
     }
     let files = dir.join("data").join("extracted");
     std::fs::create_dir_all(&files).map_err(|err| format!("{}: {err}", files.display()))?;
-    manage::package_setup(pkg, keys, &files)?;
+    manage::package_setup(pkg, e.update.as_deref(), keys, &files)?;
     let modules = recomp::layout(&files.join("exefs"))?;
     recomp::scaffold(dir, id, e, &modules, nxrt)
 }
@@ -356,7 +359,19 @@ fn keys_for(chosen: Option<&Path>, package: &Path) -> Option<PathBuf> {
 
 impl App {
     fn new(cc: &eframe::CreationContext) -> App {
-        let library = Library::load();
+        let mut library = Library::load();
+        // (a game added from an update before updates were told apart: the package is the update)
+        let mut moved = false;
+        for e in library.games.iter_mut().filter(|e| e.exe.is_none() && e.update.is_none()) {
+            let (Some(p), Some(k)) = (e.package.clone(), e.keys.clone().or(library.keys.clone())) else { continue };
+            if manage::package_info(&p, &k).is_ok_and(|i| i.is_update) {
+                e.update = e.package.take();
+                moved = true;
+            }
+        }
+        if moved {
+            let _ = library.save();
+        }
         let games: Vec<Game> = library.games.iter().cloned().map(Game::new).collect();
         for g in &games {
             g.refresh(&cc.egui_ctx);
@@ -459,7 +474,7 @@ impl App {
         let r = match job {
             Job::Play => Run::game(&exe, dr.as_deref(), true, log_file, repaint),
             Job::StartScreen => Run::game(&exe, dr.as_deref(), false, log_file, repaint),
-            Job::Step(stage, src) => Run::setup(&exe, dr.as_deref(), stage, &src, keys.as_deref(), log_file, repaint),
+            Job::Step(stage, src) => Run::setup(&exe, dr.as_deref(), stage, &src, keys.as_deref(), g.entry.update.as_deref(), log_file, repaint),
             Job::DevBuild => match (&g.entry.build_dir, &g.entry.build_cmd) {
                 (Some(d), Some(cmd)) => Run::dev_build(cmd, d, log_file, repaint),
                 _ => Err("No Dev build command set".into()),
@@ -534,8 +549,24 @@ fn add_package_to(games: &mut Vec<Game>, package: &Path, keys: &Path) -> Result<
         let _ = std::fs::create_dir_all(path.parent().unwrap());
         let _ = std::fs::write(&path, icon);
     }
-    if let Some(i) = games.iter().position(|g| g.entry.package.as_deref() == Some(package)) {
+    if let Some(i) = games.iter().position(|g| g.entry.package.as_deref() == Some(package) || g.entry.update.as_deref() == Some(package)) {
         return Ok(i);  // (already here)
+    }
+    // base game and update pair up (the same title; an update's id differs in its low bits)
+    let base_tid = |t: &str| u64::from_str_radix(t, 16).map(|v| v & !0xFFF).unwrap_or(0);
+    let same = |t: &str| !t.is_empty() && base_tid(t) == base_tid(&p.title_id);
+    let partner = games.iter().position(|g| same(&g.entry.title_id) && if p.is_update { g.entry.update.is_none() } else { g.entry.package.is_none() && g.entry.update.is_some() });
+    if let Some(i) = partner {
+        let e = &mut games[i].entry;
+        if p.is_update {  // (the update's code is what runs: its version and build)
+            e.update = Some(package.to_path_buf());
+            e.version = p.version;
+            e.build_id = p.build_id.unwrap_or_default();
+        } else {
+            e.package = Some(package.to_path_buf());
+            if e.name.is_empty() { e.name = p.name; }
+        }
+        return Ok(i);
     }
     // the game's app: an entry whose app runs this title (and has no package yet)
     let app = games.iter().position(|g| {
@@ -550,7 +581,7 @@ fn add_package_to(games: &mut Vec<Game>, package: &Path, keys: &Path) -> Result<
         }
     };
     let e = &mut games[i].entry;
-    e.package = Some(package.to_path_buf());
+    if p.is_update { e.update = Some(package.to_path_buf()) } else { e.package = Some(package.to_path_buf()) }
     e.keys = Some(keys.to_path_buf());
     e.title_id = p.title_id;
     e.name = p.name;
@@ -582,6 +613,8 @@ fn reveal_file(p: &Path) {
 /// What each place a game uses is for (Where things are; the buttons' tooltips say the same)
 const ABOUT_PACKAGE: &str = "Your copy of the game (.nsp / .xci). Never changed: the game's data is read from it in place, \
     so keep it where it is.";
+const ABOUT_UPDATE: &str = "The game's update (.nsp): its new code, and its changes to the game's data, read in place with \
+    the base package. Keep it where it is.";
 const ABOUT_KEYS: &str = "The keys from your own Switch (prod.keys). Needed to read the package; nothing is decrypted to disk.";
 const ABOUT_APP: &str = "The recomp's program: it runs this game (and does its setup steps). The manager starts it.";
 const ABOUT_RECOMP: &str = "The recomp the manager created for this game: its source (Makefile, runtime/<id>_game.c, \
@@ -631,6 +664,9 @@ fn summary(g: &Game) -> (String, Color32) {
     if g.running() {
         return (if g.run.as_ref().is_some_and(|r| r.kind == Kind::Game) { "Playing" } else { "Working..." }.into(), BLUE);
     }
+    if g.entry.package.is_none() && g.entry.update.is_some() {
+        return ("An update: add its base game".into(), AMBER);
+    }
     if g.entry.exe.is_none() {
         return ("No nxrt app for this game yet".into(), Color32::GRAY);
     }
@@ -649,6 +685,9 @@ fn summary(g: &Game) -> (String, Color32) {
 fn next_action(g: &Game, i: usize) -> Option<(String, Action, bool)> {
     if g.running() {
         return None;
+    }
+    if g.entry.package.is_none() && g.entry.update.is_some() {
+        return Some(("Add its base game".to_string(), Action::AddBase(i), false));
     }
     if g.entry.exe.is_none() {
         return g.entry.package.is_some().then(|| ("Create a recomp".to_string(), Action::CreateRecomp(i), false));
@@ -817,6 +856,12 @@ impl eframe::App for App {
             Some(Action::Open(i)) => {
                 self.selected = i;
                 self.view = View::Game;
+            }
+            Some(Action::AddBase(i)) => {
+                if let Some(p) = rfd::FileDialog::new().set_title("The base game (.xci / .nsp) for this update").add_filter("Switch game", &["nsp", "xci"]).pick_file() {
+                    self.selected = i;
+                    self.add_package(ctx, p);
+                }
             }
             Some(Action::AddPackage) => {
                 if let Some(p) = rfd::FileDialog::new().set_title("A Switch game (.nsp / .xci)").add_filter("Switch game", &["nsp", "xci"]).pick_file() {
@@ -1032,6 +1077,13 @@ impl App {
                         if let Some(r) = &mut g.run { r.stop(); }
                     }
                 } else {
+                    if g.entry.package.is_none() && g.entry.update.is_some() {
+                        ui.label(RichText::new("This is the game's update").strong().size(18.0));
+                        ui.label(RichText::new("An update holds the game's new code and only its changes to the game's data: it is set up and played together with the base game (its .xci or .nsp).").color(SUB));
+                        ui.add_space(8.0);
+                        if ui.add(primary("Add its base game...")).clicked() { *action = Some(Action::AddBase(sel)); }
+                        ui.add_space(8.0);
+                    }
                     ui.label(RichText::new("No recomp runs this game yet").strong().size(18.0));
                     ui.label(RichText::new("If its recomp exists, add its app. Otherwise make one from the package: a plain recompilation to start a port from.").color(SUB));
                     ui.add_space(8.0);
@@ -1186,6 +1238,7 @@ impl App {
             ui.label(RichText::new("Where things are").strong().size(19.0));
             ui.add_space(4.0);
             if let Some(p) = &g.entry.package { place(ui, "Game package", TAG_KEEP, ABOUT_PACKAGE, p, true); }
+            if let Some(u) = &g.entry.update { place(ui, "Update", TAG_KEEP, ABOUT_UPDATE, u, true); }
             if let Some(s) = &s {
                 place(ui, "Data folder", TAG_BACKUP, ABOUT_DATA, Path::new(&s.data_root), false);
                 place(ui, "Game folder", TAG_REBUILD, ABOUT_GAME, &game_dir(s), false);
@@ -1536,7 +1589,7 @@ fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
     let src = src.map(str::to_string).or_else(|| e.package.as_ref().map(|p| p.display().to_string())).unwrap_or_default();
     let code_id = runner::status(exe, e.data_root.as_deref()).map(|s| s.code_id).unwrap_or_default();
     let keys = lib.keys.clone().filter(|k| k.is_file()).or_else(|| e.keys.clone());
-    let mut r = match Run::setup(exe, e.data_root.as_deref(), stage, &src, keys.as_deref(), None, || {}) {
+    let mut r = match Run::setup(exe, e.data_root.as_deref(), stage, &src, keys.as_deref(), e.update.as_deref(), None, || {}) {
         Ok(r) => r,
         Err(err) => { eprintln!("{err}"); return 2; }
     };

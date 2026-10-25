@@ -3,7 +3,7 @@
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::path::Path;
 
-const NXM_ABI: c_int = 1;
+const NXM_ABI: c_int = 2;
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
@@ -29,13 +29,14 @@ struct NxmPackage {
     version: [c_char; 0x11],
     icon: *mut u8,
     icon_size: usize,
+    is_update: bool,
 }
 
 extern "C" {
     fn nxm_package_info(package: *const c_char, keys: *const c_char, out: *mut NxmPackage, why: *mut c_char, why_size: usize) -> bool;
     fn nxm_package_free(p: *mut NxmPackage);
     fn nxm_find_keys(package: *const c_char, out: *mut c_char, out_size: usize) -> bool;
-    fn nxm_package_setup(package: *const c_char, keys: *const c_char, out_dir: *const c_char, title_id: *mut u64, why: *mut c_char, why_size: usize) -> bool;
+    fn nxm_package_setup_update(package: *const c_char, update: *const c_char, keys: *const c_char, out_dir: *const c_char, title_id: *mut u64, why: *mut c_char, why_size: usize) -> bool;
     fn nxm_abi() -> c_int;
     fn nxm_game_files(game_dir: *const c_char, out: *mut NxmGameFiles) -> bool;
     fn nxm_romfs_open(game_dir: *const c_char, why: *mut c_char, why_size: usize) -> *mut NxmRomfs;
@@ -121,6 +122,8 @@ pub struct Package {
     pub version: String,
     /// the game's icon, a JPEG
     pub icon: Option<Vec<u8>>,
+    /// an update: played with its base game
+    pub is_update: bool,
 }
 
 fn cstr(b: &[c_char]) -> String {
@@ -134,13 +137,15 @@ pub fn find_keys(package: &Path) -> Option<std::path::PathBuf> {
     unsafe { nxm_find_keys(c.as_ptr(), out.as_mut_ptr(), out.len()) }.then(|| cstr(&out).into())
 }
 
-/// A game folder set up from a package: its ExeFS written to <out_dir>/exefs, its RomFS described in
-/// <out_dir>/romfs.src (read from the package in place). Seconds.
-pub fn package_setup(package: &Path, keys: &Path, out_dir: &Path) -> Result<(), String> {
+/// A game folder set up from a package (and its update): its ExeFS written to <out_dir>/exefs, its RomFS described in
+/// <out_dir>/romfs.src (read from the package, and the update's changes, in place). Seconds.
+pub fn package_setup(package: &Path, update: Option<&Path>, keys: &Path, out_dir: &Path) -> Result<(), String> {
     let (p, k, o) = (cpath(package).ok_or("bad path")?, cpath(keys).ok_or("bad path")?, cpath(out_dir).ok_or("bad path")?);
+    let u = update.and_then(cpath);
     let mut why = [0 as c_char; 256];
     let mut tid = 0u64;
-    if unsafe { nxm_package_setup(p.as_ptr(), k.as_ptr(), o.as_ptr(), &mut tid, why.as_mut_ptr(), why.len()) } {
+    let up = u.as_ref().map_or(std::ptr::null(), |u| u.as_ptr());
+    if unsafe { nxm_package_setup_update(p.as_ptr(), up, k.as_ptr(), o.as_ptr(), &mut tid, why.as_mut_ptr(), why.len()) } {
         Ok(())
     } else {
         Err(cstr(&why))
@@ -163,6 +168,7 @@ pub fn package_info(package: &Path, keys: &Path) -> Result<Package, String> {
         publisher: cstr(&out.publisher),
         version: cstr(&out.version),
         icon,
+        is_update: out.is_update,
     };
     unsafe { nxm_package_free(&mut out) };
     Ok(r)
