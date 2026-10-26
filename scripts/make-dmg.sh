@@ -23,5 +23,5 @@ ln -s /Applications "$STAGE/Applications"
 
 hdiutil create -volname "nxrt $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$OUT"
 hdiutil verify "$OUT"
-shasum -a 256 "$OUT" > dist/SHA256SUMS
+(cd dist && shasum -a 256 "$(basename "$OUT")" > SHA256SUMS)  # (the bare name: `shasum -c` next to the download)
 cat dist/SHA256SUMS
