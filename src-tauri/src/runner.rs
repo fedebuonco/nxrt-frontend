@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Describe {
     pub id: String,
-    #[allow(dead_code)]  // (the runner's own name for itself: logs)
+    #[allow(dead_code)] // (the runner's own name for itself: logs)
     pub exe: String,
     pub title: String,
     pub game_name: String,
@@ -22,7 +22,7 @@ pub struct Describe {
     #[serde(default)]
     pub version: String,
     #[serde(default)]
-    #[allow(dead_code)]  // (the app's own start-screen title)
+    #[allow(dead_code)] // (the app's own start-screen title)
     pub headline: String,
     #[serde(default)]
     pub gamelib_id: String,
@@ -56,17 +56,24 @@ fn command(exe: &Path, data_root: Option<&Path>) -> Command {
 }
 
 /// One JSON object from the runner's stdout (it logs to stderr).
-fn query<T: for<'de> Deserialize<'de>>(exe: &Path, data_root: Option<&Path>, flag: &str, key: &str) -> Result<T, String> {
+fn query<T: for<'de> Deserialize<'de>>(
+    exe: &Path,
+    data_root: Option<&Path>,
+    flag: &str,
+    key: &str,
+) -> Result<T, String> {
     let out = command(exe, data_root)
         .arg(flag)
         .stdin(Stdio::null())
         .output()
         .map_err(|e| format!("can't run {}: {e}", exe.display()))?;
     let text = String::from_utf8_lossy(&out.stdout);
-    let line = text
-        .lines()
-        .find(|l| l.contains(key))
-        .ok_or_else(|| format!("{} doesn't answer {flag} (an nxrt app from before the manager?)", exe.display()))?;
+    let line = text.lines().find(|l| l.contains(key)).ok_or_else(|| {
+        format!(
+            "{} doesn't answer {flag} (an nxrt app from before the manager?)",
+            exe.display()
+        )
+    })?;
     serde_json::from_str(line).map_err(|e| format!("{flag}: {e}"))
 }
 
@@ -159,7 +166,14 @@ pub struct Run {
 impl Run {
     /// The game: `--play` boots straight into it (the manager is the start screen), without it the app's own start
     /// screen comes up (its settings, setup).
-    pub fn game(exe: &Path, data_root: Option<&Path>, play: bool, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static, controls: Option<&Path>) -> Result<Run, String> {
+    pub fn game(
+        exe: &Path,
+        data_root: Option<&Path>,
+        play: bool,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+        controls: Option<&Path>,
+    ) -> Result<Run, String> {
         let mut c = command(exe, data_root);
         if let Some(p) = controls {
             c.env("NXRT_CONTROLLER", p);
@@ -174,7 +188,17 @@ impl Run {
     /// the game code), Generate and Compile on the files already set up. Hidden: no window.
     /// keys: the player's prod.keys for a package (NXRT_KEYS; None: the app looks beside it and in ~/.switch).
     /// update: the game's update for a package (NXRT_UPDATE), set up with it.
-    pub fn setup(exe: &Path, data_root: Option<&Path>, stage: Stage, src: &str, keys: Option<&Path>, update: Option<&Path>, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+    #[allow(clippy::too_many_arguments)] // (the setup's own knobs: package, keys, update, stage, log)
+    pub fn setup(
+        exe: &Path,
+        data_root: Option<&Path>,
+        stage: Stage,
+        src: &str,
+        keys: Option<&Path>,
+        update: Option<&Path>,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
         let mut c = command(exe, data_root);
         if let Some(k) = keys {
             c.env("NXRT_KEYS", k);
@@ -193,20 +217,35 @@ impl Run {
     }
 
     /// A shell command in dir (a game's source checkout: `make gen` and the game library).
-    pub fn dev_build(cmd: &str, dir: &Path, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+    pub fn dev_build(
+        cmd: &str,
+        dir: &Path,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
         let mut c = Command::new("/bin/sh");
         c.arg("-c").arg(cmd).current_dir(dir);
         Run::spawn(c, dir, Kind::DevBuild, log_file, repaint)
     }
 
     /// A new recomp's build (recomp.rs: its build.sh), in its folder.
-    pub fn create(dir: &Path, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+    pub fn create(
+        dir: &Path,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
         let mut c = Command::new("/bin/sh");
         c.arg("build.sh").current_dir(dir);
         Run::spawn(c, dir, Kind::Create, log_file, repaint)
     }
 
-    fn spawn(mut c: Command, what: &Path, kind: Kind, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+    fn spawn(
+        mut c: Command,
+        what: &Path,
+        kind: Kind,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
         let run_id = crate::logging::new_run_id();
         c.env("NXRT_RUN_ID", &run_id);
         // (a verbose manager session, NXRT_GAME_LOG=debug, is a verbose nxrt session; its default is info)
@@ -230,14 +269,18 @@ impl Run {
             })?;
         let log: Log = Arc::new(Mutex::new(VecDeque::new()));
         let progress: Arc<Mutex<Progress>> = Default::default();
-        let file = log_file.as_ref().and_then(|p| std::fs::File::create(p).ok()).map(|f| Arc::new(Mutex::new(f)));
+        let file = log_file
+            .as_ref()
+            .and_then(|p| std::fs::File::create(p).ok())
+            .map(|f| Arc::new(Mutex::new(f)));
         let repaint = Arc::new(repaint);
         let streams: Vec<Box<dyn std::io::Read + Send>> = vec![
             Box::new(child.stdout.take().unwrap()),
             Box::new(child.stderr.take().unwrap()),
         ];
         for s in streams {
-            let (log, file, repaint, progress) = (log.clone(), file.clone(), repaint.clone(), progress.clone());
+            let (log, file, repaint, progress) =
+                (log.clone(), file.clone(), repaint.clone(), progress.clone());
             std::thread::spawn(move || {
                 for line in BufReader::new(s).lines().map_while(Result::ok) {
                     if let Some(f) = &file {
@@ -252,7 +295,8 @@ impl Run {
                                 g.step = p.step;
                             }
                         }
-                    } else if matches!(kind, Kind::Setup(_)) && line.starts_with("{\"nxrt_setup\"") {
+                    } else if matches!(kind, Kind::Setup(_)) && line.starts_with("{\"nxrt_setup\"")
+                    {
                         if let Ok(r) = serde_json::from_str::<SetupResult>(&line) {
                             progress.lock().unwrap().result = Some(r);
                         }
@@ -268,7 +312,14 @@ impl Run {
                 }
             });
         }
-        Ok(Run { child, kind, log, progress, log_file, run_id })
+        Ok(Run {
+            child,
+            kind,
+            log,
+            progress,
+            log_file,
+            run_id,
+        })
     }
 
     /// None while it runs, else how it ended.

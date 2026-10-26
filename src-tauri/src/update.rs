@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-pub const DEFAULT_URL: &str = "https://raw.githubusercontent.com/fedebuonco/nxrt/macos-core/frontend/latest.json";
+pub const DEFAULT_URL: &str =
+    "https://raw.githubusercontent.com/fedebuonco/nxrt/macos-core/frontend/latest.json";
 const TTL: Duration = Duration::from_secs(6 * 3600);
 
 #[derive(Serialize, Clone)]
@@ -59,8 +60,13 @@ pub fn check(force: bool) -> UpdateInfo {
 
 fn fetch() -> UpdateInfo {
     let url = std::env::var("NXRT_FRONTEND_UPDATE_URL").unwrap_or_else(|_| DEFAULT_URL.into());
-    if !(url.starts_with("https://") || url.starts_with("http://127.0.0.1") || url.starts_with("http://localhost")) {
-        return failed(format!("update URL is not https (or a local test URL): {url}"));
+    if !(url.starts_with("https://")
+        || url.starts_with("http://127.0.0.1")
+        || url.starts_with("http://localhost"))
+    {
+        return failed(format!(
+            "update URL is not https (or a local test URL): {url}"
+        ));
     }
     let out = std::process::Command::new("curl")
         .args([
@@ -81,7 +87,11 @@ fn fetch() -> UpdateInfo {
     };
     if !out.status.success() {
         let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return failed(if msg.is_empty() { format!("update check failed ({})", out.status) } else { msg });
+        return failed(if msg.is_empty() {
+            format!("update check failed ({})", out.status)
+        } else {
+            msg
+        });
     }
     let text = String::from_utf8_lossy(&out.stdout);
     let manifest: Manifest = match serde_json::from_str(&text) {

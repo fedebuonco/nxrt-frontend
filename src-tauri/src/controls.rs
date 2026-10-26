@@ -10,13 +10,39 @@ use std::path::{Path, PathBuf};
 
 /// The Switch inputs a controller button can drive (input/bindings.c's "bind_pad_" names, in its order).
 pub const PAD_INPUTS: &[&str] = &[
-    "a", "b", "x", "y", "lstick", "rstick", "l", "r", "zl", "zr", "plus", "minus", "left", "up", "right", "down",
+    "a", "b", "x", "y", "lstick", "rstick", "l", "r", "zl", "zr", "plus", "minus", "left", "up",
+    "right", "down",
 ];
 /// The host buttons those inputs can be bound to (bindings.c's PADB_HOST names).
 pub const PAD_BUTTONS: &[&str] = &[
-    "south", "east", "west", "north", "back", "guide", "start", "lstick", "rstick", "lshoulder", "rshoulder",
-    "dpad_up", "dpad_down", "dpad_left", "dpad_right", "misc1", "rpaddle1", "lpaddle1", "rpaddle2", "lpaddle2",
-    "touchpad", "misc2", "misc3", "misc4", "misc5", "misc6", "ltrigger", "rtrigger",
+    "south",
+    "east",
+    "west",
+    "north",
+    "back",
+    "guide",
+    "start",
+    "lstick",
+    "rstick",
+    "lshoulder",
+    "rshoulder",
+    "dpad_up",
+    "dpad_down",
+    "dpad_left",
+    "dpad_right",
+    "misc1",
+    "rpaddle1",
+    "lpaddle1",
+    "rpaddle2",
+    "lpaddle2",
+    "touchpad",
+    "misc2",
+    "misc3",
+    "misc4",
+    "misc5",
+    "misc6",
+    "ltrigger",
+    "rtrigger",
 ];
 pub const PROMPTS: &[&str] = &["auto", "nintendo", "xbox", "playstation", "keyboard"];
 
@@ -131,7 +157,13 @@ impl Controls {
 pub fn overlay_path(key: &str) -> PathBuf {
     let mut safe: String = key
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect();
     while safe.contains("--") {
         safe = safe.replace("--", "-");
@@ -141,7 +173,9 @@ pub fn overlay_path(key: &str) -> PathBuf {
     let short: String = safe.chars().take(60).collect();
     let mut h = std::collections::hash_map::DefaultHasher::new();
     key.hash(&mut h);
-    crate::library::dir().join("controls").join(format!("{short}-{:08x}.conf", h.finish() as u32))
+    crate::library::dir()
+        .join("controls")
+        .join(format!("{short}-{:08x}.conf", h.finish() as u32))
 }
 
 #[cfg(test)]
@@ -152,7 +186,9 @@ mod tests {
         Controls {
             prompts: Some("nintendo".into()),
             rumble: Some(false),
-            bind_pad: [("a".to_string(), "south".to_string())].into_iter().collect(),
+            bind_pad: [("a".to_string(), "south".to_string())]
+                .into_iter()
+                .collect(),
             ..Default::default()
         }
     }
@@ -184,7 +220,9 @@ mod tests {
         let c = Controls {
             prompts: Some("xbox".into()),
             rumble_strength: Some(70),
-            bind_pad: [("zl".to_string(), "ltrigger".to_string())].into_iter().collect(),
+            bind_pad: [("zl".to_string(), "ltrigger".to_string())]
+                .into_iter()
+                .collect(),
             ..Default::default()
         };
         let lines = c.lines();
@@ -211,8 +249,18 @@ mod tests {
 
     #[test]
     fn validation_rejects_unknown_names() {
-        assert!(Controls { prompts: Some("gamecube".into()), ..Default::default() }.validate().is_err());
-        assert!(Controls { rumble_strength: Some(101), ..Default::default() }.validate().is_err());
+        assert!(Controls {
+            prompts: Some("gamecube".into()),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(Controls {
+            rumble_strength: Some(101),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
         let mut c = Controls::default();
         c.bind_pad.insert("bogus".into(), "south".into());
         assert!(c.validate().is_err());

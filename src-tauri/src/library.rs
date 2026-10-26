@@ -69,15 +69,23 @@ pub struct Library {
 /// A keys file that looks like one (prod.keys: has the header key). Err: why not.
 pub fn check_keys(p: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-    if text.lines().any(|l| l.trim_start().starts_with("header_key")) {
+    if text
+        .lines()
+        .any(|l| l.trim_start().starts_with("header_key"))
+    {
         Ok(())
     } else {
-        Err(format!("{} has no header_key: not a prod.keys file", p.display()))
+        Err(format!(
+            "{} has no header_key: not a prod.keys file",
+            p.display()
+        ))
     }
 }
 
 pub fn dir() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("nxrt-frontend")
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("nxrt-frontend")
 }
 
 pub fn icon_path(title_id: &str) -> PathBuf {
@@ -85,12 +93,17 @@ pub fn icon_path(title_id: &str) -> PathBuf {
 }
 
 fn path() -> PathBuf {
-    std::env::var_os("NXRT_FRONTEND_LIBRARY").map(PathBuf::from).unwrap_or_else(|| dir().join("library.toml"))
+    std::env::var_os("NXRT_FRONTEND_LIBRARY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| dir().join("library.toml"))
 }
 
 impl Library {
     pub fn load() -> Library {
-        std::fs::read_to_string(path()).ok().and_then(|s| toml::from_str(&s).ok()).unwrap_or_default()
+        std::fs::read_to_string(path())
+            .ok()
+            .and_then(|s| toml::from_str(&s).ok())
+            .unwrap_or_default()
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -106,7 +119,11 @@ impl Library {
         if self.games.iter().any(|g| g.exe.as_deref() == Some(exe)) {
             return false;
         }
-        self.games.push(Entry { exe: Some(exe.to_path_buf()), data_root, ..Default::default() });
+        self.games.push(Entry {
+            exe: Some(exe.to_path_buf()),
+            data_root,
+            ..Default::default()
+        });
         true
     }
 }
@@ -119,10 +136,15 @@ mod tests {
     fn controls_round_trip_in_the_library_file() {
         let controls = Controls {
             prompts: Some("nintendo".into()),
-            bind_pad: [("a".to_string(), "south".to_string())].into_iter().collect(),
+            bind_pad: [("a".to_string(), "south".to_string())]
+                .into_iter()
+                .collect(),
             ..Default::default()
         };
-        let game_controls = Controls { dpad_move: Some(false), ..Default::default() };
+        let game_controls = Controls {
+            dpad_move: Some(false),
+            ..Default::default()
+        };
         let lib = Library {
             keys: None,
             controls: controls.clone(),
@@ -138,7 +160,10 @@ mod tests {
         let back: Library = toml::from_str(&text).unwrap();
         assert_eq!(back.controls, controls);
         assert_eq!(back.games[0].controls, game_controls);
-        assert_eq!(back.games[0].exe.as_deref(), Some(Path::new("/tmp/nxrt-test-app")));
+        assert_eq!(
+            back.games[0].exe.as_deref(),
+            Some(Path::new("/tmp/nxrt-test-app"))
+        );
     }
 
     #[test]

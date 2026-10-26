@@ -3,10 +3,10 @@
 One manager for the Switch recomps built on [nxrt](https://github.com/fedebuonco/nxrt) (FE3H, EoW, LAS, Sky ...):
 a library of games, how each game's files and game code stand, Play with the log alongside.
 
-It is a **Tauri 2** app: a Rust backend (`src-tauri/`) that owns the library and the games' own apps, and a static web
-window (`ui/`) made of plain HTML, CSS and JavaScript — system SF type, one accent, a focus ring a controller can drive.
+It is a **Tauri 2** app: a Rust backend (`src-tauri/`) that owns the library and the games' own apps, and a web window
+(`src/`, built by Vite) of plain HTML, CSS and JavaScript — system SF type, one accent, a focus ring a controller can drive.
 
-Each game stays its own app (its nxrt *runner*: `fe3hrecomp`, `eowrecomp` ...). The manager starts it; the game's app
+Each game stays its own app (its nxrt _runner_: `fe3hrecomp`, `eowrecomp` ...). The manager starts it; the game's app
 keeps owning its settings, saves and mods.
 
 - **Who a game is**: `<runner> --describe` (one JSON object: names, title id, game build, game-code id).
@@ -35,18 +35,18 @@ and the `nxrt` submodule.
 git clone --recursive git@github.com:fedebuonco/nxrt-frontend.git
 cd nxrt-frontend
 npm install
-npm run dev       # tauri dev: builds the Rust app and opens the window
+npm run dev       # Vite serves src/ with HMR; tauri dev opens the window
 ```
 
 `npm run build` makes an app bundle in `src-tauri/target/release/bundle/macos/` (unsigned: right-click → Open the first
 time). A local arm64 build is kept in [`dist/`](dist) — `nxrt-0.1.0-arm64.dmg`, ad-hoc signed and not notarized.
 
 The release build stages the nxrt submodule into the app (`Contents/Resources/nxrt`), so creating a recomp needs no
-checkout. `NXRT_DIR=<path>` at run time overrides that copy with another checkout (development). `npm install` fetches
-the Tauri CLI and nothing else: the window has no bundler.
+checkout. `NXRT_DIR=<path>` at run time overrides that copy with another checkout (development).
 
-The window's files are embedded when the Rust app is built, so **restart `npm run dev` after editing `ui/`** (a plain
-window reload is not enough).
+The window is built by Vite from `src/` into `web-dist/`, which Tauri embeds in the app; `npm run dev` serves it with
+hot reload (no restart while editing). `npm run lint` and `npm run fmt` run ESLint and Prettier; the Rust side is
+`cargo fmt` + `cargo clippy` (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layout and the next steps).
 
 ## Use
 
@@ -76,17 +76,17 @@ Any standard controller works over USB or Bluetooth — Xbox, DualSense, Switch 
 Rust backend while the manager's window has focus. The labels in the window follow the pad you have: Nintendo's bottom
 button is B, Xbox's is A, PlayStation's is ✕.
 
-| | |
-|---|---|
-| D-pad / left stick | move the focus ring |
-| bottom button (A, ✕, B) | select |
-| right button (B, ○, A) | back |
-| left button (X, □, Y) | Play / Stop the focused game |
-| top button (Y, △, X) | the game's page, or its Details |
-| LB / RB | Library, Logs, Settings |
-| LT / RT | scroll the page |
-| Start | Play |
-| Select / Back | the controls sheet |
+|                         |                                 |
+| ----------------------- | ------------------------------- |
+| D-pad / left stick      | move the focus ring             |
+| bottom button (A, ✕, B) | select                          |
+| right button (B, ○, A)  | back                            |
+| left button (X, □, Y)   | Play / Stop the focused game    |
+| top button (Y, △, X)    | the game's page, or its Details |
+| LB / RB                 | Library, Logs, Settings         |
+| LT / RT                 | scroll the page                 |
+| Start                   | Play                            |
+| Select / Back           | the controls sheet              |
 
 The hints bar at the foot of the window always shows the current map; **Select** opens the full one, and Settings has the
 map too. **Settings → Controller map** draws the pad with the effective nxrt binding on each button: press **Test** and
@@ -177,36 +177,41 @@ a controller (a simulated Xbox pad). macOS screenshots of the window: `screencap
 
 ### What the apps answer
 
-| Flag | What |
-|---|---|
-| `--describe` | the game the app runs (JSON) |
-| `--status` | its data folder, game folder, whether files and game code are ready (JSON) |
-| `--setup-files <pkg or folder>` | the game files only |
-| `--generate` / `--compile` | the game code: C from the game's code / the library from that C |
-| `--setup <pkg or folder>` | all of it |
+| Flag                            | What                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| `--describe`                    | the game the app runs (JSON)                                               |
+| `--status`                      | its data folder, game folder, whether files and game code are ready (JSON) |
+| `--setup-files <pkg or folder>` | the game files only                                                        |
+| `--generate` / `--compile`      | the game code: C from the game's code / the library from that C            |
+| `--setup <pkg or folder>`       | all of it                                                                  |
 
 The steps print `{"nxrt_progress":1,...}` lines and one `{"nxrt_setup":1,...}` result on stdout.
 
 ## Layout of the source
 
-| | |
-|---|---|
-| `ui/` | the window: `index.html`, `app.css`, `app.js` (views, focus engine, pad map, sheets) |
-| `dist/` | a local, unsigned arm64 build and its notes |
-| `src-tauri/src/main.rs` | the builder, the command-line switches, the Tauri command list |
-| `src-tauri/src/commands.rs` | library/run/step commands, the thread that follows a run and emits its log |
-| `src-tauri/src/api.rs` | the serialisable view of a game, gathered from its app in parallel |
-| `src-tauri/src/pads.rs` | controllers: gilrs → `pad-button` / `pad-dir` / `pad-trigger` / `pad-status` events |
-| `src-tauri/src/controls.rs` | controller defaults + per-game settings, and the `NXRT_CONTROLLER` overlay |
-| `src-tauri/src/issues.rs` | a game's prefilled nxrt GitHub issue (details, log tail, environment) |
-| `scripts/bundle-nxrt.sh` | stages the nxrt submodule into the app bundle for a release build |
-| `src-tauri/src/library.rs` | the library file and its `Entry`s |
-| `src-tauri/src/runner.rs` | running a game or a step, its log and progress |
-| `src-tauri/src/manage.rs` | packages, exefs, RomFS through libnxrt_manage |
-| `src-tauri/src/recomp.rs` | a new nxrt game folder for a game that has none |
-| `src-tauri/src/ops.rs` | the operations the window and the command line share |
-| `src-tauri/icons/` | the app icon (generated from `assets/icon.png`) |
-| `nxrt/` | the nxrt submodule |
+|                             |                                                                                                     |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/`                      | the window: `index.html`, `app.css`, `app.js` (views, focus engine, pad map, sheets), `js/` modules |
+| `web-dist/`                 | Vite's built window; Tauri embeds it (not checked in)                                               |
+| `dist/`                     | a local, unsigned arm64 build and its notes                                                         |
+| `vite.config.js`            | Vite root (`src/`), dev port 1420 and the `web-dist/` output                                        |
+| `src-tauri/src/main.rs`     | the thin desktop entry point                                                                        |
+| `src-tauri/src/lib.rs`      | the Tauri builder, command-line switches, setup and command list                                    |
+| `src-tauri/src/state.rs`    | the library/runs/icons/pad state the commands share                                                 |
+| `src-tauri/src/commands.rs` | library/run/step commands, the thread that follows a run and emits its log                          |
+| `docs/ARCHITECTURE.md`      | the layout, the Tauri conventions it follows, and the remaining moves                               |
+| `src-tauri/src/api.rs`      | the serialisable view of a game, gathered from its app in parallel                                  |
+| `src-tauri/src/pads.rs`     | controllers: gilrs → `pad-button` / `pad-dir` / `pad-trigger` / `pad-status` events                 |
+| `src-tauri/src/controls.rs` | controller defaults + per-game settings, and the `NXRT_CONTROLLER` overlay                          |
+| `src-tauri/src/issues.rs`   | a game's prefilled nxrt GitHub issue (details, log tail, environment)                               |
+| `scripts/bundle-nxrt.sh`    | stages the nxrt submodule into the app bundle for a release build                                   |
+| `src-tauri/src/library.rs`  | the library file and its `Entry`s                                                                   |
+| `src-tauri/src/runner.rs`   | running a game or a step, its log and progress                                                      |
+| `src-tauri/src/manage.rs`   | packages, exefs, RomFS through libnxrt_manage                                                       |
+| `src-tauri/src/recomp.rs`   | a new nxrt game folder for a game that has none                                                     |
+| `src-tauri/src/ops.rs`      | the operations the window and the command line share                                                |
+| `src-tauri/icons/`          | the app icon (generated from `assets/icon.png`)                                                     |
+| `nxrt/`                     | the nxrt submodule                                                                                  |
 
 ## Roadmap
 

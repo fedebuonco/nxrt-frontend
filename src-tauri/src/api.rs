@@ -155,7 +155,9 @@ pub struct Gathered {
 
 impl Gathered {
     pub fn gather(e: &Entry) -> Gathered {
-        let Some(exe) = &e.exe else { return Gathered::default() };
+        let Some(exe) = &e.exe else {
+            return Gathered::default();
+        };
         let describe = Some(runner::describe(exe));
         if let Some(Err(err)) = &describe {
             tracing::warn!(target: "api", exe = %exe.display(), error = %err, "describe failed");
@@ -166,8 +168,16 @@ impl Gathered {
         }
         let dir = status.as_ref().and_then(|s| s.as_ref().ok()).map(game_dir);
         let files = dir.as_deref().and_then(manage::game_files);
-        let romfs = dir.as_deref().filter(|_| files.as_ref().is_some_and(|f| f.exefs)).map(manage::romfs_summary);
-        Gathered { describe, status, files, romfs }
+        let romfs = dir
+            .as_deref()
+            .filter(|_| files.as_ref().is_some_and(|f| f.exefs))
+            .map(manage::romfs_summary);
+        Gathered {
+            describe,
+            status,
+            files,
+            romfs,
+        }
     }
 }
 
@@ -175,7 +185,10 @@ impl Gathered {
 pub fn gather_all(entries: &[Entry]) -> Vec<Gathered> {
     let mut out = Vec::with_capacity(entries.len());
     std::thread::scope(|scope| {
-        let handles: Vec<_> = entries.iter().map(|e| scope.spawn(move || Gathered::gather(e))).collect();
+        let handles: Vec<_> = entries
+            .iter()
+            .map(|e| scope.spawn(move || Gathered::gather(e)))
+            .collect();
         for h in handles {
             out.push(h.join().unwrap_or_default());
         }
@@ -186,7 +199,11 @@ pub fn gather_all(entries: &[Entry]) -> Vec<Gathered> {
 /// The game folder --status names, absolute (a relative one is in the data root: "extracted").
 pub fn game_dir(s: &runner::Status) -> PathBuf {
     let g = PathBuf::from(&s.game_dir);
-    if g.is_absolute() { g } else { PathBuf::from(&s.data_root).join(g) }
+    if g.is_absolute() {
+        g
+    } else {
+        PathBuf::from(&s.data_root).join(g)
+    }
 }
 
 /// A stable name for a game across refreshes and library edits.
@@ -204,7 +221,14 @@ pub fn game_key(e: &Entry) -> String {
     }
 }
 
-pub fn view(index: usize, e: &Entry, g: &Gathered, lib_keys: Option<&Path>, running: Option<RunInfo>, last_exit: Option<ExitInfo>) -> Game {
+pub fn view(
+    index: usize,
+    e: &Entry,
+    g: &Gathered,
+    lib_keys: Option<&Path>,
+    running: Option<RunInfo>,
+    last_exit: Option<ExitInfo>,
+) -> Game {
     let d = g.describe.as_ref().and_then(|r| r.as_ref().ok());
     let s = g.status.as_ref().and_then(|r| r.as_ref().ok());
     let title = if !e.name.is_empty() {
@@ -212,22 +236,52 @@ pub fn view(index: usize, e: &Entry, g: &Gathered, lib_keys: Option<&Path>, runn
     } else if let Some(d) = d.filter(|d| !d.game_name.is_empty()) {
         d.game_name.clone()
     } else {
-        e.exe.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        e.exe
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
     };
-    let title_id = if !e.title_id.is_empty() { e.title_id.clone() } else { d.map(|d| d.title_id.clone()).unwrap_or_default() };
+    let title_id = if !e.title_id.is_empty() {
+        e.title_id.clone()
+    } else {
+        d.map(|d| d.title_id.clone()).unwrap_or_default()
+    };
     let files = s.is_some_and(|s| s.files_ready);
     let code = s.is_some_and(|s| s.code_ready);
-    let generated = code || s.is_some_and(|s| !s.code_id.is_empty() && s.code_id == e.generated_for);
+    let generated =
+        code || s.is_some_and(|s| !s.code_id.is_empty() && s.code_id == e.generated_for);
     let builder = s.is_some_and(|s| s.builder);
     let dev = e.build_dir.is_some() && e.build_cmd.is_some();
     let ready = s.is_some_and(|s| s.ready);
-    let steps = Steps { files, generated, code, builder, dev };
+    let steps = Steps {
+        files,
+        generated,
+        code,
+        builder,
+        dev,
+    };
     let (state, tone) = summary(e, g, running.as_ref(), files, generated);
-    let next = if running.is_some() { None } else { next_action(e, s, files, generated, builder, dev) };
+    let next = if running.is_some() {
+        None
+    } else {
+        next_action(e, s, files, generated, builder, dev)
+    };
     let files_detail = if files {
-        match (g.files.as_ref(), g.romfs.as_ref().and_then(|r| r.as_ref().ok())) {
-            (Some(f), Some(r)) if f.romfs_package => format!("Read from the package in place · {} files, {:.1} GB", r.files, r.bytes as f64 / 1e9),
-            (Some(f), Some(r)) if f.romfs_dir => format!("An extracted copy · {} files, {:.1} GB", r.files, r.bytes as f64 / 1e9),
+        match (
+            g.files.as_ref(),
+            g.romfs.as_ref().and_then(|r| r.as_ref().ok()),
+        ) {
+            (Some(f), Some(r)) if f.romfs_package => format!(
+                "Read from the package in place · {} files, {:.1} GB",
+                r.files,
+                r.bytes as f64 / 1e9
+            ),
+            (Some(f), Some(r)) if f.romfs_dir => format!(
+                "An extracted copy · {} files, {:.1} GB",
+                r.files,
+                r.bytes as f64 / 1e9
+            ),
             _ => "Ready".into(),
         }
     } else if e.package.is_none() {
@@ -235,7 +289,14 @@ pub fn view(index: usize, e: &Entry, g: &Gathered, lib_keys: Option<&Path>, runn
     } else {
         "From its package, in seconds: nothing is copied".into()
     };
-    let romfs = g.romfs.as_ref().and_then(|r| r.as_ref().ok()).map(|r| RomfsInfo { files: r.files, bytes: r.bytes });
+    let romfs = g
+        .romfs
+        .as_ref()
+        .and_then(|r| r.as_ref().ok())
+        .map(|r| RomfsInfo {
+            files: r.files,
+            bytes: r.bytes,
+        });
     let describe = d.map(|d| DescribeInfo {
         title: d.title.clone(),
         version: d.version.clone(),
@@ -257,12 +318,21 @@ pub fn view(index: usize, e: &Entry, g: &Gathered, lib_keys: Option<&Path>, runn
         ready: s.ready,
         builder: s.builder,
     });
-    let files_info = g.files.as_ref().map(|f| FilesInfo { exefs: f.exefs, romfs_dir: f.romfs_dir, romfs_package: f.romfs_package, build_id: f.build_id.clone() });
+    let files_info = g.files.as_ref().map(|f| FilesInfo {
+        exefs: f.exefs,
+        romfs_dir: f.romfs_dir,
+        romfs_package: f.romfs_package,
+        build_id: f.build_id.clone(),
+    });
     let load_error = match &g.describe {
         Some(Err(err)) => Some(err.clone()),
         _ => None,
     };
-    let build_mismatch = d.is_some_and(|d| !e.build_id.is_empty() && !d.build_id.is_empty() && !e.build_id.eq_ignore_ascii_case(&d.build_id));
+    let build_mismatch = d.is_some_and(|d| {
+        !e.build_id.is_empty()
+            && !d.build_id.is_empty()
+            && !e.build_id.eq_ignore_ascii_case(&d.build_id)
+    });
     let has_icon = !title_id.is_empty() && crate::library::icon_path(&title_id).is_file();
     Game {
         index,
@@ -270,13 +340,19 @@ pub fn view(index: usize, e: &Entry, g: &Gathered, lib_keys: Option<&Path>, runn
         title_id,
         title,
         publisher: e.publisher.clone(),
-        version: if !e.version.is_empty() { e.version.clone() } else { d.map(|d| d.game_version.clone()).unwrap_or_default() },
+        version: if !e.version.is_empty() {
+            e.version.clone()
+        } else {
+            d.map(|d| d.game_version.clone()).unwrap_or_default()
+        },
         app_name: d.map(|d| d.title.clone()).unwrap_or_default(),
         app_version: d.map(|d| d.version.clone()).unwrap_or_default(),
         exe: e.exe.as_deref().map(path_str),
         package: e.package.as_deref().map(path_str),
         update: e.update.as_deref().map(path_str),
-        data_root: s.map(|s| s.data_root.clone()).or_else(|| e.data_root.as_deref().map(path_str)),
+        data_root: s
+            .map(|s| s.data_root.clone())
+            .or_else(|| e.data_root.as_deref().map(path_str)),
         game_dir: s.map(|s| game_dir(s).display().to_string()),
         recomp_dir: e.recomp_dir.as_deref().map(path_str),
         build_dir: e.build_dir.as_deref().map(path_str),
@@ -305,9 +381,22 @@ fn path_str(p: &Path) -> String {
     p.display().to_string()
 }
 
-fn summary(e: &Entry, g: &Gathered, running: Option<&RunInfo>, files: bool, generated: bool) -> (String, String) {
+fn summary(
+    e: &Entry,
+    g: &Gathered,
+    running: Option<&RunInfo>,
+    files: bool,
+    generated: bool,
+) -> (String, String) {
     if let Some(r) = running {
-        return (if r.playing { "Playing".into() } else { "Working…".into() }, "info".into());
+        return (
+            if r.playing {
+                "Playing".into()
+            } else {
+                "Working…".into()
+            },
+            "info".into(),
+        );
     }
     if e.package.is_none() && e.update.is_some() {
         return ("An update: add its base game".into(), "warn".into());
@@ -320,31 +409,72 @@ fn summary(e: &Entry, g: &Gathered, running: Option<&RunInfo>, files: bool, gene
         Some(Err(err)) => (err.clone(), "error".into()),
         Some(Ok(s)) if s.ready => ("Ready to play".into(), "ok".into()),
         Some(Ok(_)) => {
-            let next = if !files { "Next: set up the game files" } else if !generated { "Next: generate the game code" } else { "Next: compile the game code" };
+            let next = if !files {
+                "Next: set up the game files"
+            } else if !generated {
+                "Next: generate the game code"
+            } else {
+                "Next: compile the game code"
+            };
             (next.into(), "warn".into())
         }
     }
 }
 
-fn next_action(e: &Entry, s: Option<&runner::Status>, files: bool, generated: bool, builder: bool, dev: bool) -> Option<Next> {
+fn next_action(
+    e: &Entry,
+    s: Option<&runner::Status>,
+    files: bool,
+    generated: bool,
+    builder: bool,
+    dev: bool,
+) -> Option<Next> {
     if e.package.is_none() && e.update.is_some() {
-        return Some(Next { label: "Add its base game".into(), kind: "add-base".into(), primary: false });
+        return Some(Next {
+            label: "Add its base game".into(),
+            kind: "add-base".into(),
+            primary: false,
+        });
     }
     if e.exe.is_none() {
-        return e.package.is_some().then(|| Next { label: "Create a recomp".into(), kind: "create".into(), primary: false });
+        return e.package.is_some().then(|| Next {
+            label: "Create a recomp".into(),
+            kind: "create".into(),
+            primary: false,
+        });
     }
     let s = s?;
     if s.ready {
-        return Some(Next { label: "Play".into(), kind: "play".into(), primary: true });
+        return Some(Next {
+            label: "Play".into(),
+            kind: "play".into(),
+            primary: true,
+        });
     }
     if !files {
-        return Some(Next { label: "Set up the game files".into(), kind: "files".into(), primary: true });
+        return Some(Next {
+            label: "Set up the game files".into(),
+            kind: "files".into(),
+            primary: true,
+        });
     }
     if !builder && dev {
-        return Some(Next { label: "Build the game code".into(), kind: "build".into(), primary: true });
+        return Some(Next {
+            label: "Build the game code".into(),
+            kind: "build".into(),
+            primary: true,
+        });
     }
     if !generated {
-        return Some(Next { label: "Generate".into(), kind: "generate".into(), primary: true });
+        return Some(Next {
+            label: "Generate".into(),
+            kind: "generate".into(),
+            primary: true,
+        });
     }
-    Some(Next { label: "Compile".into(), kind: "compile".into(), primary: true })
+    Some(Next {
+        label: "Compile".into(),
+        kind: "compile".into(),
+        primary: true,
+    })
 }

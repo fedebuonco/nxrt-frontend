@@ -6,6 +6,10 @@ rust-version = "1.85"
 description = "A manager for nxrt Switch recomps: one library of games, their files and game code, Play"
 publish = false
 
+[lib]
+name = "nxrt_frontend_lib"
+path = "src/lib.rs"
+
 [[bin]]
 name = "nxrt-frontend"
 path = "src/main.rs"

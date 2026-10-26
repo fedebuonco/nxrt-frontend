@@ -54,7 +54,8 @@ fn issue(who: &str) -> i32 {
         api::game_key(e) == who
             || e.title_id.eq_ignore_ascii_case(who)
             || e.exe.as_ref().is_some_and(|x| {
-                runner::describe(x).is_ok_and(|d| d.id == who || d.title_id.eq_ignore_ascii_case(who))
+                runner::describe(x)
+                    .is_ok_and(|d| d.id == who || d.title_id.eq_ignore_ascii_case(who))
             })
     }) else {
         eprintln!("{who}: not in the library");
@@ -62,7 +63,10 @@ fn issue(who: &str) -> i32 {
     };
     let g = api::Gathered::gather(e);
     let v = api::view(index, e, &g, lib.keys.as_deref(), None, None);
-    println!("{}", issues::for_game(&v, &recomp::default_nxrt(), &library::dir().join("logs")));
+    println!(
+        "{}",
+        issues::for_game(&v, &recomp::default_nxrt(), &library::dir().join("logs"))
+    );
     0
 }
 
@@ -76,7 +80,10 @@ fn list() {
             println!("  package: {p}");
         }
         if let Some(app) = &v.describe {
-            println!("  app: {} v{} (code {})", app.title, app.version, app.gamelib_id);
+            println!(
+                "  app: {} v{} (code {})",
+                app.title, app.version, app.gamelib_id
+            );
         }
         if let Some(err) = &v.load_error {
             println!("  app: {err}");
@@ -84,11 +91,19 @@ fn list() {
         if let Some(s) = &v.status {
             println!(
                 "  steps: files {} generated {} compiled {} | data {} | game {}",
-                v.steps.files, v.steps.generated, v.steps.code, s.data_root, v.game_dir.as_deref().unwrap_or("")
+                v.steps.files,
+                v.steps.generated,
+                v.steps.code,
+                s.data_root,
+                v.game_dir.as_deref().unwrap_or("")
             );
         }
         if let Some(r) = &v.romfs {
-            println!("  game data: {} files, {:.2} GB", r.files, r.bytes as f64 / 1e9);
+            println!(
+                "  game data: {} files, {:.2} GB",
+                r.files,
+                r.bytes as f64 / 1e9
+            );
         }
     }
 }
@@ -97,7 +112,11 @@ fn list() {
 fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
     let lib = Library::load();
     let Some(e) = lib.games.iter().find(|e| {
-        e.title_id.eq_ignore_ascii_case(who) || e.exe.as_ref().is_some_and(|x| runner::describe(x).is_ok_and(|d| d.id == who || d.title_id.eq_ignore_ascii_case(who)))
+        e.title_id.eq_ignore_ascii_case(who)
+            || e.exe.as_ref().is_some_and(|x| {
+                runner::describe(x)
+                    .is_ok_and(|d| d.id == who || d.title_id.eq_ignore_ascii_case(who))
+            })
     }) else {
         eprintln!("{who}: not in the library");
         return 2;
@@ -112,10 +131,28 @@ fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
         "compile" => Stage::Compile,
         _ => Stage::All,
     };
-    let src = src.map(str::to_string).or_else(|| e.package.as_ref().map(|p| p.display().to_string())).unwrap_or_default();
-    let code_id = runner::status(exe, e.data_root.as_deref()).map(|s| s.code_id).unwrap_or_default();
-    let keys = lib.keys.clone().filter(|k| k.is_file()).or_else(|| e.keys.clone());
-    let mut r = match runner::Run::setup(exe, e.data_root.as_deref(), stage, &src, keys.as_deref(), e.update.as_deref(), None, || {}) {
+    let src = src
+        .map(str::to_string)
+        .or_else(|| e.package.as_ref().map(|p| p.display().to_string()))
+        .unwrap_or_default();
+    let code_id = runner::status(exe, e.data_root.as_deref())
+        .map(|s| s.code_id)
+        .unwrap_or_default();
+    let keys = lib
+        .keys
+        .clone()
+        .filter(|k| k.is_file())
+        .or_else(|| e.keys.clone());
+    let mut r = match runner::Run::setup(
+        exe,
+        e.data_root.as_deref(),
+        stage,
+        &src,
+        keys.as_deref(),
+        e.update.as_deref(),
+        None,
+        || {},
+    ) {
         Ok(r) => r,
         Err(err) => {
             eprintln!("{err}");
@@ -143,8 +180,14 @@ fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
     if ok && stage == Stage::Generate {
         // (recorded as the window does: Compile is next)
         let mut lib = Library::load();
-        if let Some(x) = lib.games.iter_mut().find(|x| x.exe == e.exe && x.package == e.package) {
-            x.generated_for = runner::status(exe, e.data_root.as_deref()).map(|s| s.code_id).unwrap_or(code_id);
+        if let Some(x) = lib
+            .games
+            .iter_mut()
+            .find(|x| x.exe == e.exe && x.package == e.package)
+        {
+            x.generated_for = runner::status(exe, e.data_root.as_deref())
+                .map(|s| s.code_id)
+                .unwrap_or(code_id);
             let _ = lib.save();
         }
     }
@@ -153,15 +196,25 @@ fn cli_step(who: &str, stage: &str, src: Option<&str>) -> i32 {
         Some(r) => println!("failed: {} {} ({how})", r.step, r.hint),
         None => println!("no result ({how})"),
     }
-    if ok { 0 } else { 1 }
+    if ok {
+        0
+    } else {
+        1
+    }
 }
 
 /// `--add <package | app> [--data-root <dir>]`
 fn add(args: &[String], i: usize) -> i32 {
     let what = PathBuf::from(args.get(i + 1).map(String::as_str).unwrap_or(""));
-    let dr = args.iter().position(|a| a == "--data-root").and_then(|j| args.get(j + 1)).map(PathBuf::from);
+    let dr = args
+        .iter()
+        .position(|a| a == "--data-root")
+        .and_then(|j| args.get(j + 1))
+        .map(PathBuf::from);
     let mut lib = Library::load();
-    let is_pkg = what.extension().is_some_and(|e| e.eq_ignore_ascii_case("nsp") || e.eq_ignore_ascii_case("xci"));
+    let is_pkg = what
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("nsp") || e.eq_ignore_ascii_case("xci"));
     let msg = if is_pkg {
         let Some(keys) = ops::keys_for(lib.keys.as_deref(), &what) else {
             eprintln!("no prod.keys beside the package or in ~/.switch");
@@ -172,7 +225,16 @@ fn add(args: &[String], i: usize) -> i32 {
             Ok(i) => {
                 lib.games = games;
                 let e = &lib.games[i];
-                format!("{} [{}]: added{}", e.name, e.title_id, if e.exe.is_some() { ", with its app" } else { " (no nxrt app for it yet)" })
+                format!(
+                    "{} [{}]: added{}",
+                    e.name,
+                    e.title_id,
+                    if e.exe.is_some() {
+                        ", with its app"
+                    } else {
+                        " (no nxrt app for it yet)"
+                    }
+                )
             }
             Err(e) => {
                 eprintln!("{e}");
@@ -183,12 +245,24 @@ fn add(args: &[String], i: usize) -> i32 {
         let exe = ops::resolve_app(&what);
         match runner::describe(&exe) {
             Ok(d) => {
-                if let Some(g) = lib.games.iter_mut().find(|g| g.exe.is_none() && g.title_id.eq_ignore_ascii_case(&d.title_id)) {
+                if let Some(g) = lib
+                    .games
+                    .iter_mut()
+                    .find(|g| g.exe.is_none() && g.title_id.eq_ignore_ascii_case(&d.title_id))
+                {
                     g.exe = Some(exe);
                     g.data_root = dr;
                     format!("{}: given to {}", d.title, g.name)
                 } else {
-                    format!("{}: {}", d.title, if lib.add_app(&exe, dr) { "added" } else { "already in the list" })
+                    format!(
+                        "{}: {}",
+                        d.title,
+                        if lib.add_app(&exe, dr) {
+                            "added"
+                        } else {
+                            "already in the list"
+                        }
+                    )
                 }
             }
             Err(e) => {
@@ -208,21 +282,41 @@ fn add(args: &[String], i: usize) -> i32 {
 /// `--create <title id> [--id <id>] [--dir <folder>]`: a new recomp, its app built
 fn create(args: &[String], i: usize) -> i32 {
     let who = args.get(i + 1).cloned().unwrap_or_default();
-    let opt = |k: &str| args.iter().position(|a| a == k).and_then(|j| args.get(j + 1)).cloned();
+    let opt = |k: &str| {
+        args.iter()
+            .position(|a| a == k)
+            .and_then(|j| args.get(j + 1))
+            .cloned()
+    };
     let mut lib = Library::load();
-    let Some(gi) = lib.games.iter().position(|e| e.title_id.eq_ignore_ascii_case(&who)) else {
+    let Some(gi) = lib
+        .games
+        .iter()
+        .position(|e| e.title_id.eq_ignore_ascii_case(&who))
+    else {
         eprintln!("{who}: not in the library");
         return 2;
     };
     let e = lib.games[gi].clone();
     let id = opt("--id").unwrap_or_else(|| recomp::default_id(&e.name));
-    let dir = opt("--dir").map(PathBuf::from).unwrap_or_else(|| recomp::default_dir(&id));
-    let keys = lib.keys.clone().filter(|k| k.is_file()).or(e.keys.clone()).unwrap_or_default();
+    let dir = opt("--dir")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| recomp::default_dir(&id));
+    let keys = lib
+        .keys
+        .clone()
+        .filter(|k| k.is_file())
+        .or(e.keys.clone())
+        .unwrap_or_default();
     if let Err(err) = ops::create_recomp(&e, &id, &dir, &recomp::default_nxrt(), &keys) {
         eprintln!("{err}");
         return 1;
     }
-    println!("{}: recomp at {} (modules in its Makefile); building its app...", e.name, dir.display());
+    println!(
+        "{}: recomp at {} (modules in its Makefile); building its app...",
+        e.name,
+        dir.display()
+    );
     let mut r = runner::Run::create(&dir, None, || {}).unwrap_or_else(|err| {
         eprintln!("{err}");
         std::process::exit(1)
@@ -241,7 +335,17 @@ fn create(args: &[String], i: usize) -> i32 {
     };
     let app = recomp::app_path(&dir, &id);
     if how != "closed" || !app.is_file() {
-        for l in r.log.lock().unwrap().iter().rev().take(15).collect::<Vec<_>>().into_iter().rev() {
+        for l in r
+            .log
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .take(15)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
             eprintln!("  {l}");
         }
         eprintln!("the build {how}");
@@ -255,6 +359,9 @@ fn create(args: &[String], i: usize) -> i32 {
         eprintln!("{err}");
         return 1;
     }
-    println!("app: {} - next: --step {who} generate, then compile", app.display());
+    println!(
+        "app: {} - next: --step {who} generate, then compile",
+        app.display()
+    );
     0
 }

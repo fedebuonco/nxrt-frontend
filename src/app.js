@@ -1,4 +1,6 @@
 /* nxrt-frontend — the window's side. Talks to the Rust commands, renders the four views. */
+import { ago, baseName, bytes, dirName, errText, esc, initials, samePath } from './js/format.js';
+import { ICONS } from './js/icons.js';
 (() => {
   'use strict';
 
@@ -41,66 +43,15 @@
     wantFocusFirst: false,
   };
 
-  // ---- text, paths, time ----------------------------------------------------------------------------------------
-
-  const esc = (v) =>
-    String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  const baseName = (p) => String(p || '').split('/').filter(Boolean).pop() || String(p || '');
-  const dirName = (p) => String(p || '').split('/').slice(0, -1).join('/') || '/';
-  const errText = (e) => (typeof e === 'string' ? e : e && e.message ? e.message : String(e));
-  const samePath = (a, b) => String(a || '') === String(b || '');
-
-  function initials(name) {
-    const words = String(name || '').split(/[^A-Za-z0-9]+/).filter((w) => w.length > 2 || /^[A-Z]+$/.test(w));
-    const s = words.map((w) => w[0]).slice(0, 3).join('');
-    return (s || '?').toUpperCase();
-  }
-
-  function ago(secs) {
-    const now = Math.floor(Date.now() / 1000);
-    const d = Math.max(0, now - Number(secs || 0));
-    if (d < 60) return 'just now';
-    if (d < 3600) return `${Math.floor(d / 60)} min ago`;
-    if (d < 86400) return `${Math.floor(d / 3600)} h ago`;
-    return `${Math.floor(d / 86400)} d ago`;
-  }
-
-  function bytes(n) {
-    n = Number(n || 0);
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
-    return `${Math.max(1, Math.round(n / 1e3))} KB`;
-  }
-
-  // ---- icons ----------------------------------------------------------------------------------------------------
-
-  const svg = (body, w = 16) => `<svg class="ico" width="${w}" height="${w}" viewBox="0 0 16 16" fill="none" aria-hidden="true">${body}</svg>`;
-  const ICONS = {
-    grid: svg('<rect x="1.7" y="1.7" width="5.1" height="5.1" rx="1.3" fill="currentColor"/><rect x="9.2" y="1.7" width="5.1" height="5.1" rx="1.3" fill="currentColor"/><rect x="1.7" y="9.2" width="5.1" height="5.1" rx="1.3" fill="currentColor"/><rect x="9.2" y="9.2" width="5.1" height="5.1" rx="1.3" fill="currentColor"/>'),
-    doc: svg('<rect x="3.1" y="1.6" width="9.8" height="12.8" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 5.3h5.2M5.4 8h5.2M5.4 10.7h3.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>'),
-    sliders: svg('<path d="M2 4.4h12M2 11.6h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="5.8" cy="4.4" r="1.9" fill="currentColor"/><circle cx="10.2" cy="11.6" r="1.9" fill="currentColor"/>'),
-    play: svg('<path d="M4.4 2.6v10.8L13 8z" fill="currentColor"/>', 12),
-    plus: svg('<path d="M8 2.4v11.2M2.4 8h11.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>', 14),
-    check: svg('<path d="M3.2 8.4l3 3 6.6-6.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>', 14),
-    back: svg('<path d="M9.8 3.4L5.2 8l4.6 4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>', 14),
-    chevron: svg('<path d="M4.4 6.2L8 9.8l3.6-3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>', 12),
-    x: svg('<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>', 14),
-    stop: svg('<rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.5" fill="currentColor"/>', 12),
-    folder: svg('<path d="M2 4.4c0-.7.6-1.2 1.2-1.2h2.4l1.3 1.5h5.9c.7 0 1.2.5 1.2 1.2v5.7c0 .7-.5 1.2-1.2 1.2H3.2c-.6 0-1.2-.5-1.2-1.2V4.4z" stroke="currentColor" stroke-width="1.3"/>'),
-    key: svg('<circle cx="5.6" cy="5.6" r="2.9" stroke="currentColor" stroke-width="1.4"/><path d="M7.7 7.7l4.6 4.6M10.2 10.2l1.5-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'),
-    cpu: svg('<rect x="3.4" y="3.4" width="9.2" height="9.2" rx="1.6" stroke="currentColor" stroke-width="1.4"/><rect x="6.4" y="6.4" width="3.2" height="3.2" rx=".8" fill="currentColor"/>'),
-    spark: svg('<path d="M8 1.8l1.4 4.8L14.2 8l-4.8 1.4L8 14.2 6.6 9.4 1.8 8l4.8-1.4z" fill="currentColor"/>', 14),
-    screen: svg('<rect x="2.2" y="3.2" width="11.6" height="8" rx="1.4" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 13.4h5.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', 14),
-    bug: svg('<ellipse cx="8" cy="8.8" rx="3.3" ry="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.6V2.9M5.3 6L3.7 4.4M10.7 6l1.6-1.6M4.7 8.8H2.4M13.6 8.8h-2.3M5.4 11.4l-1.7 1.5M10.6 11.4l1.7 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>', 14),
-    pad: svg('<path d="M4.5 5.3h7c1.3 0 2.2.9 2.5 2.2l.6 2.6c.3 1.3-.8 2.3-2 1.9l-1.5-.6c-.5-.2-1-.6-1.6-.6H6.5c-.6 0-1 .4-1.6.6l-1.5.6c-1.2.4-2.3-.6-2-1.9l.6-2.6c.3-1.3 1.2-2.2 2.5-2.2z" stroke="currentColor" stroke-width="1.25"/><path d="M5.1 8.2v2.1M4.1 9.25h2.1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="10.8" cy="8.7" r=".8" fill="currentColor"/><circle cx="11.9" cy="10" r=".8" fill="currentColor"/>', 16),
-  };
-
   const ABOUT = {
-    package: "Your copy of the game (.nsp / .xci). Never changed: the game's data is read from it in place, so keep it where it is.",
-    update: "The game's update (.nsp): its new code, and its changes to the game's data, read in place with the base package. Keep it where it is.",
+    package:
+      "Your copy of the game (.nsp / .xci). Never changed: the game's data is read from it in place, so keep it where it is.",
+    update:
+      "The game's update (.nsp): its new code, and its changes to the game's data, read in place with the base package. Keep it where it is.",
     keys: 'The keys from your own Switch (prod.keys). Needed to read the package; nothing is decrypted to disk.',
     app: "The recomp's program: it runs this game (and does its setup steps). The manager starts it.",
-    recomp: "The recomp the manager created for this game: its source (Makefile, runtime/<id>_game.c, tools/patches.py). Edit it to work on the port; build.sh rebuilds the app.",
+    recomp:
+      'The recomp the manager created for this game: its source (Makefile, runtime/<id>_game.c, tools/patches.py). Edit it to work on the port; build.sh rebuilds the app.',
     data: "Yours: the game's settings, saves and their backups, mods, and the shader cache. Back this folder up; deleting it loses your saves.",
     game: "Made from the package: the game's code files (exefs), a pointer to its data in the package (romfs.src), and the built game code (.gamebuild, the game's library). Safe to delete: the steps make it again.",
     logs: 'A log of every run and step the manager started: what to send when something goes wrong.',
@@ -109,31 +60,74 @@
   // ---- controller settings passed to games --------------------------------------------------------
 
   const CTRL_INPUTS = [
-    ['a', 'A'], ['b', 'B'], ['x', 'X'], ['y', 'Y'],
-    ['l', 'L'], ['r', 'R'], ['zl', 'ZL'], ['zr', 'ZR'],
-    ['plus', 'Plus'], ['minus', 'Minus'],
-    ['lstick', 'Left stick press'], ['rstick', 'Right stick press'],
-    ['left', 'D-pad Left'], ['up', 'D-pad Up'], ['right', 'D-pad Right'], ['down', 'D-pad Down'],
+    ['a', 'A'],
+    ['b', 'B'],
+    ['x', 'X'],
+    ['y', 'Y'],
+    ['l', 'L'],
+    ['r', 'R'],
+    ['zl', 'ZL'],
+    ['zr', 'ZR'],
+    ['plus', 'Plus'],
+    ['minus', 'Minus'],
+    ['lstick', 'Left stick press'],
+    ['rstick', 'Right stick press'],
+    ['left', 'D-pad Left'],
+    ['up', 'D-pad Up'],
+    ['right', 'D-pad Right'],
+    ['down', 'D-pad Down'],
   ];
   const CTRL_BUTTONS = [
-    ['south', 'South (bottom)'], ['east', 'East (right)'], ['west', 'West (left)'], ['north', 'North (top)'],
-    ['lshoulder', 'L1 / L'], ['rshoulder', 'R1 / R'], ['ltrigger', 'L2 / ZL'], ['rtrigger', 'R2 / ZR'],
-    ['back', 'Back / Minus'], ['start', 'Start / Plus'], ['guide', 'Guide'],
-    ['lstick', 'L stick press'], ['rstick', 'R stick press'],
-    ['dpad_up', 'D-pad Up'], ['dpad_down', 'D-pad Down'], ['dpad_left', 'D-pad Left'], ['dpad_right', 'D-pad Right'],
-    ['touchpad', 'Touchpad'], ['misc1', 'Misc 1'], ['rpaddle1', 'Paddle 1'], ['lpaddle1', 'Paddle 3'],
-    ['rpaddle2', 'Paddle 2'], ['lpaddle2', 'Paddle 4'],
-    ['misc2', 'Misc 2'], ['misc3', 'Misc 3'], ['misc4', 'Misc 4'], ['misc5', 'Misc 5'], ['misc6', 'Misc 6'],
+    ['south', 'South (bottom)'],
+    ['east', 'East (right)'],
+    ['west', 'West (left)'],
+    ['north', 'North (top)'],
+    ['lshoulder', 'L1 / L'],
+    ['rshoulder', 'R1 / R'],
+    ['ltrigger', 'L2 / ZL'],
+    ['rtrigger', 'R2 / ZR'],
+    ['back', 'Back / Minus'],
+    ['start', 'Start / Plus'],
+    ['guide', 'Guide'],
+    ['lstick', 'L stick press'],
+    ['rstick', 'R stick press'],
+    ['dpad_up', 'D-pad Up'],
+    ['dpad_down', 'D-pad Down'],
+    ['dpad_left', 'D-pad Left'],
+    ['dpad_right', 'D-pad Right'],
+    ['touchpad', 'Touchpad'],
+    ['misc1', 'Misc 1'],
+    ['rpaddle1', 'Paddle 1'],
+    ['lpaddle1', 'Paddle 3'],
+    ['rpaddle2', 'Paddle 2'],
+    ['lpaddle2', 'Paddle 4'],
+    ['misc2', 'Misc 2'],
+    ['misc3', 'Misc 3'],
+    ['misc4', 'Misc 4'],
+    ['misc5', 'Misc 5'],
+    ['misc6', 'Misc 6'],
   ];
-  const CTRL_PROMPTS = [['auto', 'Auto'], ['nintendo', 'Nintendo'], ['xbox', 'Xbox'], ['playstation', 'PlayStation'], ['keyboard', 'Keyboard']];
+  const CTRL_PROMPTS = [
+    ['auto', 'Auto'],
+    ['nintendo', 'Nintendo'],
+    ['xbox', 'Xbox'],
+    ['playstation', 'PlayStation'],
+    ['keyboard', 'Keyboard'],
+  ];
 
   const ctrlBool = (v) => (v === true ? '1' : v === false ? '0' : '');
   const ctrlButtonLabel = (v) => (CTRL_BUTTONS.find(([x]) => x === v) || ['', v || ''])[1];
   const ctrlPromptLabel = (v) => (CTRL_PROMPTS.find(([x]) => x === v) || ['', v || ''])[1];
   function ctrlCount(c) {
     if (!c) return 0;
-    return (c.prompts ? 1 : 0) + (c.dpad_move != null ? 1 : 0) + (c.rumble != null ? 1 : 0) +
-      (c.rumble_strength != null ? 1 : 0) + (c.led != null ? 1 : 0) + Object.keys(c.bind_pad || {}).length;
+    return (
+      (c.prompts ? 1 : 0) +
+      (c.dpad_move != null ? 1 : 0) +
+      (c.rumble != null ? 1 : 0) +
+      (c.rumble_strength != null ? 1 : 0) +
+      (c.led != null ? 1 : 0) +
+      Object.keys(c.bind_pad || {}).length
+    );
   }
   function ctrlInherit(scope, has, label) {
     if (scope === 'defaults') return "Game's own";
@@ -141,23 +135,73 @@
   }
   function ctrlSelect(name, options, value, inherit) {
     const opts = [`<option value="">${esc(inherit)}</option>`];
-    for (const [v, label] of options) opts.push(`<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(label)}</option>`);
+    for (const [v, label] of options)
+      opts.push(`<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(label)}</option>`);
     return `<select data-c="${esc(name)}">${opts.join('')}</select>`;
   }
   function ctrlForm(scope, c, global, key) {
-    c = c || {}; global = global || {};
-    const gp = global.bind_pad || {}, bp = c.bind_pad || {};
+    c = c || {};
+    global = global || {};
+    const gp = global.bind_pad || {},
+      bp = c.bind_pad || {};
     const inheritBool = (name) => ctrlInherit(scope, global[name] != null, global[name] ? 'On' : 'Off');
     const strength = [['0', '0%']];
     for (let i = 5; i <= 100; i += 5) strength.push([String(i), `${i}%`]);
     const prefs = [
-      ['Button prompts', 'prompts', CTRL_PROMPTS, c.prompts || '', ctrlInherit(scope, !!global.prompts, ctrlPromptLabel(global.prompts))],
-      ['D-pad moves the stick', 'dpad_move', [['1', 'On'], ['0', 'Off']], ctrlBool(c.dpad_move), inheritBool('dpad_move')],
-      ['Rumble', 'rumble', [['1', 'On'], ['0', 'Off']], ctrlBool(c.rumble), inheritBool('rumble')],
-      ['Rumble strength', 'rumble_strength', strength, c.rumble_strength != null ? String(c.rumble_strength) : '', ctrlInherit(scope, global.rumble_strength != null, global.rumble_strength != null ? `${global.rumble_strength}%` : '')],
-      ['Controller light', 'led', [['1', 'On'], ['0', 'Off']], ctrlBool(c.led), inheritBool('led')],
-    ].map(([label, name, options, value, inherit]) =>
-      `<label class="ctl-row"><span class="ctl-label">${esc(label)}</span>${ctrlSelect(name, options, value, inherit)}</label>`).join('');
+      [
+        'Button prompts',
+        'prompts',
+        CTRL_PROMPTS,
+        c.prompts || '',
+        ctrlInherit(scope, !!global.prompts, ctrlPromptLabel(global.prompts)),
+      ],
+      [
+        'D-pad moves the stick',
+        'dpad_move',
+        [
+          ['1', 'On'],
+          ['0', 'Off'],
+        ],
+        ctrlBool(c.dpad_move),
+        inheritBool('dpad_move'),
+      ],
+      [
+        'Rumble',
+        'rumble',
+        [
+          ['1', 'On'],
+          ['0', 'Off'],
+        ],
+        ctrlBool(c.rumble),
+        inheritBool('rumble'),
+      ],
+      [
+        'Rumble strength',
+        'rumble_strength',
+        strength,
+        c.rumble_strength != null ? String(c.rumble_strength) : '',
+        ctrlInherit(
+          scope,
+          global.rumble_strength != null,
+          global.rumble_strength != null ? `${global.rumble_strength}%` : '',
+        ),
+      ],
+      [
+        'Controller light',
+        'led',
+        [
+          ['1', 'On'],
+          ['0', 'Off'],
+        ],
+        ctrlBool(c.led),
+        inheritBool('led'),
+      ],
+    ]
+      .map(
+        ([label, name, options, value, inherit]) =>
+          `<label class="ctl-row"><span class="ctl-label">${esc(label)}</span>${ctrlSelect(name, options, value, inherit)}</label>`,
+      )
+      .join('');
     const binds = CTRL_INPUTS.map(([input, label]) => {
       const inherit = ctrlInherit(scope, !!gp[input], ctrlButtonLabel(gp[input]));
       return `<label class="ctl-row"><span class="ctl-label">${esc(label)}</span>${ctrlSelect(`bind_pad.${input}`, CTRL_BUTTONS, bp[input] || '', inherit)}</label>`;
@@ -184,7 +228,9 @@
   }
   function controlsCard(g) {
     const n = ctrlCount(g.controls);
-    const note = n ? tag(`${n} set`, '') : `<span class="muted small">${ctrlCount(S.snap.controls) ? 'using defaults' : "the game's own"}</span>`;
+    const note = n
+      ? tag(`${n} set`, '')
+      : `<span class="muted small">${ctrlCount(S.snap.controls) ? 'using defaults' : "the game's own"}</span>`;
     return `<details class="disc" data-disc="controls-${esc(g.key)}">
       <summary>Controls ${note}</summary>
       <div class="disc-body">
@@ -198,11 +244,19 @@
   // ---- bits -----------------------------------------------------------------------------------------------------
 
   const toneClass = (t) => `tone-${t || 'muted'}`;
-  const pill = (text, tone) => `<span class="pill ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i>${esc(text)}</span>`;
+  const pill = (text, tone) =>
+    `<span class="pill ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i>${esc(text)}</span>`;
   const tag = (text, kind) => `<span class="tag ${kind || ''}">${esc(text)}</span>`;
 
   function shortLabel(label) {
-    return ({ 'Set up the game files': 'Set up', 'Build the game code': 'Build', 'Add its base game': 'Add base', 'Create a recomp': 'Create' })[label] || label;
+    return (
+      {
+        'Set up the game files': 'Set up',
+        'Build the game code': 'Build',
+        'Add its base game': 'Add base',
+        'Create a recomp': 'Create',
+      }[label] || label
+    );
   }
 
   function metaLine(g) {
@@ -244,7 +298,10 @@
       })
       .join('');
     if (S.snap && S.snap.running > 0) {
-      nav.insertAdjacentHTML('beforeend', `<div class="sidebar-run"><span class="spinner"></span>${S.snap.running} running</div>`);
+      nav.insertAdjacentHTML(
+        'beforeend',
+        `<div class="sidebar-run"><span class="spinner"></span>${S.snap.running} running</div>`,
+      );
     }
   }
 
@@ -373,7 +430,7 @@
           ? `<div class="cols" style="grid-template-columns:1fr">${logCard(g)}</div>`
           : `<div class="cols">${placesCard(g)}${logCard(g)}</div>`
       }
-      ${solo ? '' : details(g) + dev(g) + remove(g)}
+      ${solo ? '' : details(g) + dev(g) + remove()}
     </div>`;
   }
 
@@ -431,25 +488,110 @@
     const r = g.running || {};
     const n = g.next || {};
     const list = [
-      { title: 'Game files', detail: g.files_detail, done: g.steps.files, running: r.kind === 'files', next: n.kind === 'files', label: 'Set up', stage: 'files' },
+      {
+        title: 'Game files',
+        detail: g.files_detail,
+        done: g.steps.files,
+        running: r.kind === 'files',
+        next: n.kind === 'files',
+        label: 'Set up',
+        stage: 'files',
+      },
     ];
     if (g.steps.builder || !g.steps.dev) {
-      list.push({ title: 'Generate the game code', detail: "The game's ARM code, translated to C", done: g.steps.generated, running: r.kind === 'generate', next: n.kind === 'generate', label: 'Generate', stage: 'generate' });
-      list.push({ title: 'Compile the game code', detail: "That C, built into the game's library", done: g.steps.code, running: r.kind === 'compile' || r.kind === 'all', next: n.kind === 'compile', label: 'Compile', stage: 'compile' });
+      list.push({
+        title: 'Generate the game code',
+        detail: "The game's ARM code, translated to C",
+        done: g.steps.generated,
+        running: r.kind === 'generate',
+        next: n.kind === 'generate',
+        label: 'Generate',
+        stage: 'generate',
+      });
+      list.push({
+        title: 'Compile the game code',
+        detail: "That C, built into the game's library",
+        done: g.steps.code,
+        running: r.kind === 'compile' || r.kind === 'all',
+        next: n.kind === 'compile',
+        label: 'Compile',
+        stage: 'compile',
+      });
     } else {
-      list.push({ title: 'Build the game code', detail: "This app's Dev build command", done: g.steps.code, running: r.kind === 'all' || r.kind === 'build', next: n.kind === 'build', label: 'Build', stage: 'build' });
+      list.push({
+        title: 'Build the game code',
+        detail: "This app's Dev build command",
+        done: g.steps.code,
+        running: r.kind === 'all' || r.kind === 'build',
+        next: n.kind === 'build',
+        label: 'Build',
+        stage: 'build',
+      });
     }
-    list.push({ title: 'Play', detail: 'The game in its own window', play: true, ready: g.ready, running: r.kind === 'play' });
+    list.push({
+      title: 'Play',
+      detail: 'The game in its own window',
+      play: true,
+      ready: g.ready,
+      running: r.kind === 'play',
+    });
     list.forEach((s, i) => (s.n = i + 1));
     return list;
   }
 
   function stepHtml(g, s) {
-    const cls = s.play ? (s.running ? 'running' : s.ready ? 'play-ready' : '') : s.done ? 'done' : s.running ? 'running' : s.next ? 'next' : '';
-    const head = s.play ? (s.running ? 'Playing' : s.ready ? 'Ready' : `Step ${s.n}`) : s.done ? `Step ${s.n} · done` : s.running ? `Step ${s.n} · running` : s.next ? `Step ${s.n} · next` : `Step ${s.n}`;
-    const headTone = s.play ? (s.running ? 'tone-info' : s.ready ? 'tone-ok' : 'tone-muted') : s.done ? 'tone-ok' : s.running ? 'tone-info' : s.next ? 'tone-ok' : 'tone-muted';
-    const circle = s.running ? '<span class="spinner"></span>' : s.play ? (s.ready ? ICONS.check : ICONS.play) : s.done ? ICONS.check : String(s.n);
-    const act = s.next && s.stage ? `<div class="act"><button class="btn primary sm" data-act="next">${esc(s.label)}</button></div>` : '';
+    const cls = s.play
+      ? s.running
+        ? 'running'
+        : s.ready
+          ? 'play-ready'
+          : ''
+      : s.done
+        ? 'done'
+        : s.running
+          ? 'running'
+          : s.next
+            ? 'next'
+            : '';
+    const head = s.play
+      ? s.running
+        ? 'Playing'
+        : s.ready
+          ? 'Ready'
+          : `Step ${s.n}`
+      : s.done
+        ? `Step ${s.n} · done`
+        : s.running
+          ? `Step ${s.n} · running`
+          : s.next
+            ? `Step ${s.n} · next`
+            : `Step ${s.n}`;
+    const headTone = s.play
+      ? s.running
+        ? 'tone-info'
+        : s.ready
+          ? 'tone-ok'
+          : 'tone-muted'
+      : s.done
+        ? 'tone-ok'
+        : s.running
+          ? 'tone-info'
+          : s.next
+            ? 'tone-ok'
+            : 'tone-muted';
+    const circle = s.running
+      ? '<span class="spinner"></span>'
+      : s.play
+        ? s.ready
+          ? ICONS.check
+          : ICONS.play
+        : s.done
+          ? ICONS.check
+          : String(s.n);
+    const act =
+      s.next && s.stage
+        ? `<div class="act"><button class="btn primary sm" data-act="next">${esc(s.label)}</button></div>`
+        : '';
     return `<div class="step ${cls}">
       <div class="step-head"><span class="step-num">${circle}</span><span class="eyebrow ${headTone}">${esc(head)}</span></div>
       <div class="name">${esc(s.title)}</div>
@@ -486,7 +628,8 @@
 
   function placesCard(g) {
     const rows = [];
-    const add = (name, tagText, tagKind, about, path, file) => path && rows.push({ name, tagText, tagKind, about, path, file });
+    const add = (name, tagText, tagKind, about, path, file) =>
+      path && rows.push({ name, tagText, tagKind, about, path, file });
     add('Game package', 'keep', 'keep', ABOUT.package, g.package, true);
     add('Update', 'keep', 'keep', ABOUT.update, g.update, true);
     add('Data folder', 'back up', 'backup', ABOUT.data, g.data_root, false);
@@ -504,7 +647,7 @@
           <div class="path" title="${esc(r.path)}">${esc(r.path)}</div>
         </div>
         <button class="btn ghost sm" data-act="reveal" data-path="${esc(r.path)}" data-file="${r.file ? '1' : '0'}">${r.file ? 'Show' : 'Open'}</button>
-      </div>`
+      </div>`,
         )
         .join('')}
     </section>`;
@@ -571,24 +714,48 @@
     </details>`;
   }
 
-  function remove(g) {
+  function remove() {
     return `<div style="margin-top:16px"><button class="btn danger" data-act="remove">Remove from the library</button></div>`;
   }
-
 
   // ---- controller map: the pad, its lit buttons and the bindings it sends ------------------------------------------
   // (the nxrt built-in defaults, as input -> host; the global defaults override them; a game's Controls may differ)
   const DEFAULT_PAD_BINDINGS = {
-    a: 'east', b: 'south', x: 'north', y: 'west',
-    l: 'lshoulder', r: 'rshoulder', zl: 'ltrigger', zr: 'rtrigger',
-    plus: 'start', minus: 'back', lstick: 'lstick', rstick: 'rstick',
-    left: 'dpad_left', up: 'dpad_up', right: 'dpad_right', down: 'dpad_down',
+    a: 'east',
+    b: 'south',
+    x: 'north',
+    y: 'west',
+    l: 'lshoulder',
+    r: 'rshoulder',
+    zl: 'ltrigger',
+    zr: 'rtrigger',
+    plus: 'start',
+    minus: 'back',
+    lstick: 'lstick',
+    rstick: 'rstick',
+    left: 'dpad_left',
+    up: 'dpad_up',
+    right: 'dpad_right',
+    down: 'dpad_down',
   };
   const TEST_HOST = {
-    south: 'south', east: 'east', north: 'north', west: 'west',
-    lb: 'lshoulder', rb: 'rshoulder', lt: 'ltrigger', rt: 'rtrigger',
-    start: 'start', select: 'back', mode: 'guide', l3: 'lstick', r3: 'rstick',
-    up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right',
+    south: 'south',
+    east: 'east',
+    north: 'north',
+    west: 'west',
+    lb: 'lshoulder',
+    rb: 'rshoulder',
+    lt: 'ltrigger',
+    rt: 'rtrigger',
+    start: 'start',
+    select: 'back',
+    mode: 'guide',
+    l3: 'lstick',
+    r3: 'rstick',
+    up: 'dpad_up',
+    down: 'dpad_down',
+    left: 'dpad_left',
+    right: 'dpad_right',
   };
   const ctrlInputLabel = (k) => (CTRL_INPUTS.find(([x]) => x === k) || [k, k])[1];
   function effectivePadMap() {
@@ -601,24 +768,42 @@
   function hostName(host) {
     const L = padLabels(S.pad.name);
     switch (host) {
-      case 'south': return `Bottom (${L.south})`;
-      case 'east': return `Right (${L.east})`;
-      case 'north': return `Top (${L.north})`;
-      case 'west': return `Left (${L.west})`;
-      case 'lshoulder': return 'LB / L1';
-      case 'rshoulder': return 'RB / R1';
-      case 'ltrigger': return 'LT / L2';
-      case 'rtrigger': return 'RT / R2';
-      case 'back': return 'Back / Minus';
-      case 'start': return 'Start / Plus';
-      case 'guide': return 'Guide';
-      case 'lstick': return 'Left stick press';
-      case 'rstick': return 'Right stick press';
-      case 'dpad_up': return 'D-pad Up';
-      case 'dpad_down': return 'D-pad Down';
-      case 'dpad_left': return 'D-pad Left';
-      case 'dpad_right': return 'D-pad Right';
-      default: return host;
+      case 'south':
+        return `Bottom (${L.south})`;
+      case 'east':
+        return `Right (${L.east})`;
+      case 'north':
+        return `Top (${L.north})`;
+      case 'west':
+        return `Left (${L.west})`;
+      case 'lshoulder':
+        return 'LB / L1';
+      case 'rshoulder':
+        return 'RB / R1';
+      case 'ltrigger':
+        return 'LT / L2';
+      case 'rtrigger':
+        return 'RT / R2';
+      case 'back':
+        return 'Back / Minus';
+      case 'start':
+        return 'Start / Plus';
+      case 'guide':
+        return 'Guide';
+      case 'lstick':
+        return 'Left stick press';
+      case 'rstick':
+        return 'Right stick press';
+      case 'dpad_up':
+        return 'D-pad Up';
+      case 'dpad_down':
+        return 'D-pad Down';
+      case 'dpad_left':
+        return 'D-pad Left';
+      case 'dpad_right':
+        return 'D-pad Right';
+      default:
+        return host;
     }
   }
   function padTestCaption() {
@@ -633,16 +818,32 @@
     const on = (host) => (S.padHeld.has(host) ? ' on' : '');
     const group = (host, inner) => `<g class="pad-host${on(host)}" data-host="${host}">${inner}</g>`;
     const face = (host, x, y, glyph) =>
-      group(host, `<circle class="pad-btn" cx="${x}" cy="${y}" r="16"/><text class="pad-glyph" x="${x}" y="${y + 4}" text-anchor="middle">${esc(glyph)}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 29}" text-anchor="middle">${esc(mapped(host))}</text>`);
+      group(
+        host,
+        `<circle class="pad-btn" cx="${x}" cy="${y}" r="16"/><text class="pad-glyph" x="${x}" y="${y + 4}" text-anchor="middle">${esc(glyph)}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 29}" text-anchor="middle">${esc(mapped(host))}</text>`,
+      );
     const shoulder = (host, x, label) =>
-      group(host, `<rect class="pad-shoulder" x="${x}" y="70" width="118" height="20" rx="10"/><text class="pad-key" x="${x + 11}" y="84">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 107}" y="84" text-anchor="end">${esc(mapped(host))}</text>`);
+      group(
+        host,
+        `<rect class="pad-shoulder" x="${x}" y="70" width="118" height="20" rx="10"/><text class="pad-key" x="${x + 11}" y="84">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 107}" y="84" text-anchor="end">${esc(mapped(host))}</text>`,
+      );
     const trigger = (host, x, label) =>
-      group(host, `<rect class="pad-trigger" x="${x}" y="48" width="82" height="16" rx="8"/><text class="pad-key" x="${x + 10}" y="59">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 72}" y="59" text-anchor="end">${esc(mapped(host))}</text>`);
+      group(
+        host,
+        `<rect class="pad-trigger" x="${x}" y="48" width="82" height="16" rx="8"/><text class="pad-key" x="${x + 10}" y="59">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 72}" y="59" text-anchor="end">${esc(mapped(host))}</text>`,
+      );
     const stick = (host, x, y, label) =>
-      group(host, `<circle class="pad-stick-out" cx="${x}" cy="${y}" r="28"/><circle class="pad-stick-in" cx="${x}" cy="${y}" r="19"/><text class="pad-glyph" x="${x}" y="${y + 3}" text-anchor="middle" font-size="8">${label}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 45}" text-anchor="middle">${esc(mapped(host))}</text>`);
-    const dir = (host, x, y, w, h) => group(host, `<rect class="pad-dir" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/>`);
+      group(
+        host,
+        `<circle class="pad-stick-out" cx="${x}" cy="${y}" r="28"/><circle class="pad-stick-in" cx="${x}" cy="${y}" r="19"/><text class="pad-glyph" x="${x}" y="${y + 3}" text-anchor="middle" font-size="8">${label}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 45}" text-anchor="middle">${esc(mapped(host))}</text>`,
+      );
+    const dir = (host, x, y, w, h) =>
+      group(host, `<rect class="pad-dir" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/>`);
     const pill = (host, x, glyph) =>
-      group(host, `<rect class="pad-btn" x="${x}" y="110" width="24" height="13" rx="6.5"/><text class="pad-glyph" x="${x + 12}" y="120" text-anchor="middle" font-size="8">${glyph}</text><text class="pad-map" data-map="${host}" x="${x + 12}" y="134" text-anchor="middle">${esc(mapped(host))}</text>`);
+      group(
+        host,
+        `<rect class="pad-btn" x="${x}" y="110" width="24" height="13" rx="6.5"/><text class="pad-glyph" x="${x + 12}" y="120" text-anchor="middle" font-size="8">${glyph}</text><text class="pad-map" data-map="${host}" x="${x + 12}" y="134" text-anchor="middle">${esc(mapped(host))}</text>`,
+      );
     return `<svg viewBox="0 0 560 350" role="img" aria-label="Controller with its button bindings">
       <path class="pad-body" d="M132 92 C78 92 58 136 66 206 C74 278 108 316 150 306 C192 296 205 252 232 244 L328 244 C355 252 368 296 410 306 C452 316 486 278 494 206 C502 136 482 92 428 92 Z"/>
       ${trigger('ltrigger', 120, 'LT')}${trigger('rtrigger', 358, 'RT')}
@@ -713,7 +914,6 @@
     renderHints();
   }
 
-
   // ---- updates: a small public manifest, a quiet sidebar chip ------------------------------------------------
   async function checkForUpdate(force = false) {
     try {
@@ -783,8 +983,8 @@
           S.logs === null
             ? `<div class="loading" style="min-height:220px"><span class="spinner"></span>Reading the logs…</div>`
             : list.length
-            ? `<div class="logs-head"><span class="eyebrow">Runs</span><span class="eyebrow">${list.length} log${list.length === 1 ? '' : 's'}</span></div>${list.map(logRow).join('')}`
-            : `<div class="empty" style="padding:36px 0"><div class="badge-icon">${ICONS.doc}</div><h2 style="font-size:14px">No runs yet</h2><p style="margin-bottom:0;font-size:11px">Every step and every game started from here keeps its log in this folder.</p></div>`
+              ? `<div class="logs-head"><span class="eyebrow">Runs</span><span class="eyebrow">${list.length} log${list.length === 1 ? '' : 's'}</span></div>${list.map(logRow).join('')}`
+              : `<div class="empty" style="padding:36px 0"><div class="badge-icon">${ICONS.doc}</div><h2 style="font-size:14px">No runs yet</h2><p style="margin-bottom:0;font-size:11px">Every step and every game started from here keeps its log in this folder.</p></div>`
         }
       </section>
     </div>`;
@@ -817,7 +1017,8 @@
     const q = S.managerSearch.trim().toLowerCase();
     const re = S.managerLevel === 'all' ? null : new RegExp(`\\b${S.managerLevel.toUpperCase()}\\b`);
     const lines = (S.manager.lines || []).filter((l) => (!re || re.test(l)) && (!q || l.toLowerCase().includes(q)));
-    if (!lines.length) return `<div class="manager-empty">No lines match${q ? ` “${esc(S.managerSearch)}”` : ''}.</div>`;
+    if (!lines.length)
+      return `<div class="manager-empty">No lines match${q ? ` “${esc(S.managerSearch)}”` : ''}.</div>`;
     return lines
       .map((l) => {
         const m = l.match(/\b(ERROR|WARN|INFO|DEBUG|TRACE)\b/);
@@ -1029,8 +1230,12 @@
   }
 
   function slugId(name) {
-    const words = String(name || '').split(/[^A-Za-z0-9]+/).filter(Boolean);
-    const id = (words.length >= 2 ? words.map((w) => w[0]).join('') : words.join('')).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const words = String(name || '')
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean);
+    const id = (words.length >= 2 ? words.map((w) => w[0]).join('') : words.join(''))
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
     return id || 'game';
   }
 
@@ -1039,15 +1244,19 @@
   function toast(text, kind = '') {
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
-    const icon = kind === 'error' ? ICONS.x : kind === 'ok' ? ICONS.check : kind === 'busy' ? '<span class="spinner"></span>' : '';
+    const icon =
+      kind === 'error' ? ICONS.x : kind === 'ok' ? ICONS.check : kind === 'busy' ? '<span class="spinner"></span>' : '';
     el.innerHTML = `${icon ? `<span class="ico">${icon}</span>` : ''}<span>${esc(text)}</span>`;
     toasts.append(el);
     if (kind !== 'busy') {
-      setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(4px)';
-        setTimeout(() => el.remove(), 200);
-      }, kind === 'error' ? 7000 : 4200);
+      setTimeout(
+        () => {
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(4px)';
+          setTimeout(() => el.remove(), 200);
+        },
+        kind === 'error' ? 7000 : 4200,
+      );
     }
     return () => el.remove();
   }
@@ -1065,7 +1274,13 @@
     renderKeys();
     renderUpdate();
     main.innerHTML =
-      S.view === 'game' ? viewGame() : S.view === 'logs' ? viewLogs() : S.view === 'settings' ? viewSettings() : viewLibrary();
+      S.view === 'game'
+        ? viewGame()
+        : S.view === 'logs'
+          ? viewLogs()
+          : S.view === 'settings'
+            ? viewSettings()
+            : viewLibrary();
     S.lastView = S.view;
     S.lastKey = S.key;
     main.scrollTop = same ? scroll : 0;
@@ -1079,7 +1294,9 @@
         S.wantFocusFirst = false;
         focusFirst();
       } else {
-        const el = (S.pendingFocus && document.querySelector(S.pendingFocus)) || (S.focusSel && document.querySelector(S.focusSel));
+        const el =
+          (S.pendingFocus && document.querySelector(S.pendingFocus)) ||
+          (S.focusSel && document.querySelector(S.focusSel));
         S.pendingFocus = null;
         if (el) setFocus(el);
         else focusFirst();
@@ -1104,7 +1321,7 @@
     render();
   }
 
-  async function load(silent = false) {
+  async function load() {
     if (S.loading) {
       S.queued = true;
       return;
@@ -1121,19 +1338,20 @@
       applyPendingView();
     } catch (e) {
       toast(errText(e), 'error');
-      if (!S.snap) main.innerHTML = `<div class="page"><div class="loading">Could not read the library.<br>${esc(errText(e))}</div></div>`;
+      if (!S.snap)
+        main.innerHTML = `<div class="page"><div class="loading">Could not read the library.<br>${esc(errText(e))}</div></div>`;
     } finally {
       S.loading = false;
       if (S.queued) {
         S.queued = false;
-        setTimeout(() => load(true), 120);
+        setTimeout(() => load(), 120);
       }
     }
   }
 
   function queueLoad() {
     clearTimeout(S.loadTimer);
-    S.loadTimer = setTimeout(() => load(true), 220);
+    S.loadTimer = setTimeout(() => load(), 220);
   }
 
   async function hydrateIcons() {
@@ -1416,7 +1634,7 @@
       if (form.dataset.scope === 'defaults') updatePadMap();
     } catch (e) {
       toast(errText(e), 'error');
-      load(true);
+      load();
     }
   }
 
@@ -1460,7 +1678,7 @@
         return;
       }
       case 'refresh':
-        return load(true);
+        return load();
       case 'add-game':
         return addGame();
       case 'add-app':
@@ -1563,7 +1781,6 @@
     }
   }
 
-
   // ---- controllers & focus --------------------------------------------------------------------------------------
 
   const FOCUS_SEL = 'button, [tabindex="0"], summary, input, select, a[href]';
@@ -1575,7 +1792,8 @@
     if (d.card) return `[data-card="${cssq(d.card)}"]`;
     if (d.nav) return `[data-nav="${cssq(d.nav)}"]`;
     if (el.id) return `#${cssq(el.id)}`;
-    if (el.tagName === 'SUMMARY' && el.parentElement && el.parentElement.dataset.disc) return `[data-disc="${cssq(el.parentElement.dataset.disc)}"] > summary`;
+    if (el.tagName === 'SUMMARY' && el.parentElement && el.parentElement.dataset.disc)
+      return `[data-disc="${cssq(el.parentElement.dataset.disc)}"] > summary`;
     if (d.act) return `[data-act="${cssq(d.act)}"]${d.key ? `[data-key="${cssq(d.key)}"]` : ''}`;
     return null;
   }
@@ -1617,7 +1835,8 @@
   function focusFirst() {
     const list = focusables();
     const inMain = list.filter((el) => main.contains(el));
-    const destructive = (el) => el.dataset.act === 'remove' || el.dataset.act === 'keys-forget' || el.classList.contains('danger');
+    const destructive = (el) =>
+      el.dataset.act === 'remove' || el.dataset.act === 'keys-forget' || el.classList.contains('danger');
     const pick =
       inMain.find((el) => el.hasAttribute('data-card')) ||
       inMain.find((el) => el.classList.contains('primary')) ||
@@ -1691,7 +1910,7 @@
     }
     if (el.tagName === 'INPUT') return;
     if (el.tagName === 'SELECT') {
-      adjustSelect(el, 1);  // (a pad cannot steer a native popup)
+      adjustSelect(el, 1); // (a pad cannot steer a native popup)
       return;
     }
     el.click();
@@ -1805,12 +2024,25 @@
       return;
     }
     const L = padLabels(S.pad.name);
-    let parts = [];
+    let parts;
     if (S.view === 'game') {
       const g = game();
-      parts = [hint(L.south, 'Select'), hint(L.east, 'Back'), hint(L.west, g && g.running ? 'Stop' : 'Play'), hint(L.north, 'Details'), hint('LB / RB', 'Section'), hint('Select', 'Help')];
+      parts = [
+        hint(L.south, 'Select'),
+        hint(L.east, 'Back'),
+        hint(L.west, g && g.running ? 'Stop' : 'Play'),
+        hint(L.north, 'Details'),
+        hint('LB / RB', 'Section'),
+        hint('Select', 'Help'),
+      ];
     } else if (S.view === 'library') {
-      parts = [hint(L.south, 'Open'), hint(L.west, 'Play'), hint(L.north, 'Info'), hint('LB / RB', 'Section'), hint('Select', 'Help')];
+      parts = [
+        hint(L.south, 'Open'),
+        hint(L.west, 'Play'),
+        hint(L.north, 'Info'),
+        hint('LB / RB', 'Section'),
+        hint('Select', 'Help'),
+      ];
     } else {
       parts = [hint(L.south, 'Select'), hint('LB / RB', 'Section'), hint('Select', 'Help')];
     }
@@ -1996,11 +2228,21 @@
     const reportUi = (level, message, source, stack) =>
       invoke('log_ui', { level, message, source, stack }).catch(() => {});
     window.addEventListener('error', (e) => {
-      reportUi('error', e.message || 'Script error', e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : '', e.error && e.error.stack ? e.error.stack : '');
+      reportUi(
+        'error',
+        e.message || 'Script error',
+        e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : '',
+        e.error && e.error.stack ? e.error.stack : '',
+      );
     });
     window.addEventListener('unhandledrejection', (e) => {
       const reason = e.reason;
-      reportUi('error', `Unhandled rejection: ${reason && reason.message ? reason.message : String(reason)}`, 'promise', reason && reason.stack ? reason.stack : '');
+      reportUi(
+        'error',
+        `Unhandled rejection: ${reason && reason.message ? reason.message : String(reason)}`,
+        'promise',
+        reason && reason.stack ? reason.stack : '',
+      );
     });
 
     document.addEventListener('keydown', (e) => {
@@ -2056,16 +2298,24 @@
       renderHints();
       if (S.view === 'settings') render();
     }).catch((e) => console.error('pad-status', e));
-    listen('pad-button', (event) => padButton(event.payload.button, event.payload.pressed)).catch((e) => console.error('pad-button', e));
+    listen('pad-button', (event) => padButton(event.payload.button, event.payload.pressed)).catch((e) =>
+      console.error('pad-button', e),
+    );
     listen('pad-dir', (event) => padDir(event.payload.dir)).catch((e) => console.error('pad-dir', e));
-    listen('pad-trigger', (event) => padTrigger(event.payload.side, event.payload.pressed)).catch((e) => console.error('pad-trigger', e));
+    listen('pad-trigger', (event) => padTrigger(event.payload.side, event.payload.pressed)).catch((e) =>
+      console.error('pad-trigger', e),
+    );
 
-    document.addEventListener('pointerdown', () => {
-      if (!S.padMode) return;
-      S.padMode = false;
-      document.body.classList.remove('pad-mode');
-      document.querySelectorAll('.pad-focus').forEach((el) => el.classList.remove('pad-focus'));
-    }, true);
+    document.addEventListener(
+      'pointerdown',
+      () => {
+        if (!S.padMode) return;
+        S.padMode = false;
+        document.body.classList.remove('pad-mode');
+        document.querySelectorAll('.pad-focus').forEach((el) => el.classList.remove('pad-focus'));
+      },
+      true,
+    );
 
     window.addEventListener('blur', () => {
       heldDirs.clear();
@@ -2089,7 +2339,7 @@
         if (e.key === 'Escape') closeSheet();
         return;
       }
-      if (e.target.matches('input, textarea, select')) return;  // (let a native select take its arrows and Enter)
+      if (e.target.matches('input, textarea, select')) return; // (let a native select take its arrows and Enter)
       const dirs = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
       if (dirs[e.key]) {
         e.preventDefault();

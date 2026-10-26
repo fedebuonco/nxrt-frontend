@@ -40,7 +40,11 @@ impl Env {
             nxrt_dir: nxrt_dir.display().to_string(),
             manager: env!("CARGO_PKG_VERSION").into(),
             macos,
-            arch: if std::env::consts::ARCH == "aarch64" { "arm64".into() } else { std::env::consts::ARCH.into() },
+            arch: if std::env::consts::ARCH == "aarch64" {
+                "arm64".into()
+            } else {
+                std::env::consts::ARCH.into()
+            },
             manager_log: crate::logging::manager_log_path().map(|p| p.display().to_string()),
         }
     }
@@ -48,7 +52,12 @@ impl Env {
 
 /// The checkout's HEAD, but only when it is that checkout's own repository (not the app repo around a staged copy).
 fn git_rev(dir: &Path) -> Option<String> {
-    let top = Command::new("git").arg("-C").arg(dir).args(["rev-parse", "--show-toplevel"]).output().ok()?;
+    let top = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .ok()?;
     if !top.status.success() {
         return None;
     }
@@ -56,7 +65,12 @@ fn git_rev(dir: &Path) -> Option<String> {
     if top != std::fs::canonicalize(dir).ok()? {
         return None;
     }
-    let out = Command::new("git").arg("-C").arg(dir).args(["rev-parse", "--short", "HEAD"]).output().ok()?;
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -74,8 +88,16 @@ pub fn for_game(g: &Game, nxrt_dir: &Path, logs_dir: &Path) -> String {
 }
 
 pub fn url(g: &Game, env: &Env, log: Option<(&Path, &str)>) -> String {
-    let title = if g.title.trim().is_empty() { "nxrt".to_string() } else { g.title.trim().to_string() };
-    format!("{NEW_ISSUE}?title={}&body={}", enc(&format!("[{title}] ")), enc(&body(g, env, log)))
+    let title = if g.title.trim().is_empty() {
+        "nxrt".to_string()
+    } else {
+        g.title.trim().to_string()
+    };
+    format!(
+        "{NEW_ISSUE}?title={}&body={}",
+        enc(&format!("[{title}] ")),
+        enc(&body(g, env, log))
+    )
 }
 
 fn body(g: &Game, env: &Env, log: Option<(&Path, &str)>) -> String {
@@ -130,7 +152,10 @@ fn body(g: &Game, env: &Env, log: Option<(&Path, &str)>) -> String {
         ),
     }
     s.push_str("\n### Environment\n");
-    s.push_str(&format!("- nxrt: `{}` (`{}`)\n", env.nxrt_rev, env.nxrt_dir));
+    s.push_str(&format!(
+        "- nxrt: `{}` (`{}`)\n",
+        env.nxrt_rev, env.nxrt_dir
+    ));
     s.push_str(&format!("- nxrt-frontend: `{}`\n", env.manager));
     s.push_str(&format!("- macOS: `{}` ({})\n", env.macos, env.arch));
     if let Some(m) = &env.manager_log {
@@ -149,7 +174,11 @@ fn row(s: &mut String, key: &str, value: &str) {
     if value.is_empty() {
         return;
     }
-    s.push_str(&format!("| **{}** | {} |\n", key, value.replace('|', "\\|").replace('\n', " ")));
+    s.push_str(&format!(
+        "| **{}** | {} |\n",
+        key,
+        value.replace('|', "\\|").replace('\n', " ")
+    ));
 }
 
 fn fence(text: &str) -> String {
@@ -200,7 +229,7 @@ pub fn latest_log(g: &Game, dir: &Path) -> Option<PathBuf> {
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        if best.as_ref().map_or(true, |(m, _)| mtime > *m) {
+        if best.as_ref().is_none_or(|(m, _)| mtime > *m) {
             best = Some((mtime, entry.path()));
         }
     }
@@ -212,7 +241,9 @@ fn enc(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + s.len() / 4);
     for b in s.as_bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(*b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -267,7 +298,11 @@ mod tests {
 
     #[test]
     fn body_has_the_game_the_log_and_the_environment() {
-        let b = body(&game(), &env(), Some((Path::new("/tmp/fake-1.log"), "frame 1\nframe 2")));
+        let b = body(
+            &game(),
+            &env(),
+            Some((Path::new("/tmp/fake-1.log"), "frame 1\nframe 2")),
+        );
         assert!(b.starts_with("### Game"));
         assert!(b.contains("Test Game"));
         assert!(b.contains("0100faketest0000"));
@@ -285,7 +320,11 @@ mod tests {
 
     #[test]
     fn url_is_a_new_issue_query() {
-        let u = url(&game(), &env(), Some((Path::new("/tmp/fake-1.log"), "done")));
+        let u = url(
+            &game(),
+            &env(),
+            Some((Path::new("/tmp/fake-1.log"), "done")),
+        );
         assert!(u.starts_with("https://github.com/fedebuonco/nxrt/issues/new?title="));
         assert!(u.contains("%5BTest%20Game%5D%20"));
         assert!(u.contains("&body="));
@@ -314,7 +353,11 @@ mod tests {
         std::fs::write(dir.join("other-3.log"), "three").unwrap();
         std::fs::write(dir.join("not-a-log.txt"), "x").unwrap();
         let found = latest_log(&game(), &dir).unwrap();
-        assert!(found.file_name().unwrap().to_string_lossy().starts_with("fake-"));
+        assert!(found
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("fake-"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

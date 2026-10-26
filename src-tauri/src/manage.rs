@@ -33,10 +33,24 @@ struct NxmPackage {
 }
 
 extern "C" {
-    fn nxm_package_info(package: *const c_char, keys: *const c_char, out: *mut NxmPackage, why: *mut c_char, why_size: usize) -> bool;
+    fn nxm_package_info(
+        package: *const c_char,
+        keys: *const c_char,
+        out: *mut NxmPackage,
+        why: *mut c_char,
+        why_size: usize,
+    ) -> bool;
     fn nxm_package_free(p: *mut NxmPackage);
     fn nxm_find_keys(package: *const c_char, out: *mut c_char, out_size: usize) -> bool;
-    fn nxm_package_setup_update(package: *const c_char, update: *const c_char, keys: *const c_char, out_dir: *const c_char, title_id: *mut u64, why: *mut c_char, why_size: usize) -> bool;
+    fn nxm_package_setup_update(
+        package: *const c_char,
+        update: *const c_char,
+        keys: *const c_char,
+        out_dir: *const c_char,
+        title_id: *mut u64,
+        why: *mut c_char,
+        why_size: usize,
+    ) -> bool;
     fn nxm_abi() -> c_int;
     fn nxm_game_files(game_dir: *const c_char, out: *mut NxmGameFiles) -> bool;
     fn nxm_romfs_open(game_dir: *const c_char, why: *mut c_char, why_size: usize) -> *mut NxmRomfs;
@@ -77,7 +91,9 @@ pub fn game_files(dir: &Path) -> Option<GameFiles> {
         exefs: out.exefs,
         romfs_dir: out.romfs_dir,
         romfs_package: out.romfs_package,
-        build_id: out.exefs.then(|| out.build_id.iter().map(|b| format!("{b:02x}")).collect()),
+        build_id: out
+            .exefs
+            .then(|| out.build_id.iter().map(|b| format!("{b:02x}")).collect()),
     })
 }
 
@@ -100,7 +116,9 @@ pub fn romfs_summary(dir: &Path) -> Result<RomfsSummary, String> {
     let mut why = [0 as c_char; 256];
     let r = unsafe { nxm_romfs_open(c.as_ptr(), why.as_mut_ptr(), why.len()) };
     if r.is_null() {
-        return Err(unsafe { CStr::from_ptr(why.as_ptr()) }.to_string_lossy().into_owned());
+        return Err(unsafe { CStr::from_ptr(why.as_ptr()) }
+            .to_string_lossy()
+            .into_owned());
     }
     let mut s = RomfsSummary::default();
     let n = unsafe { nxm_romfs_list(r, count_file, &mut s as *mut _ as *mut c_void) };
@@ -127,7 +145,9 @@ pub struct Package {
 }
 
 fn cstr(b: &[c_char]) -> String {
-    unsafe { CStr::from_ptr(b.as_ptr()) }.to_string_lossy().into_owned()
+    unsafe { CStr::from_ptr(b.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// The keys file for a package: prod.keys beside it, else ~/.switch/prod.keys.
@@ -139,13 +159,32 @@ pub fn find_keys(package: &Path) -> Option<std::path::PathBuf> {
 
 /// A game folder set up from a package (and its update): its ExeFS written to <out_dir>/exefs, its RomFS described in
 /// <out_dir>/romfs.src (read from the package, and the update's changes, in place). Seconds.
-pub fn package_setup(package: &Path, update: Option<&Path>, keys: &Path, out_dir: &Path) -> Result<(), String> {
-    let (p, k, o) = (cpath(package).ok_or("bad path")?, cpath(keys).ok_or("bad path")?, cpath(out_dir).ok_or("bad path")?);
+pub fn package_setup(
+    package: &Path,
+    update: Option<&Path>,
+    keys: &Path,
+    out_dir: &Path,
+) -> Result<(), String> {
+    let (p, k, o) = (
+        cpath(package).ok_or("bad path")?,
+        cpath(keys).ok_or("bad path")?,
+        cpath(out_dir).ok_or("bad path")?,
+    );
     let u = update.and_then(cpath);
     let mut why = [0 as c_char; 256];
     let mut tid = 0u64;
     let up = u.as_ref().map_or(std::ptr::null(), |u| u.as_ptr());
-    if unsafe { nxm_package_setup_update(p.as_ptr(), up, k.as_ptr(), o.as_ptr(), &mut tid, why.as_mut_ptr(), why.len()) } {
+    if unsafe {
+        nxm_package_setup_update(
+            p.as_ptr(),
+            up,
+            k.as_ptr(),
+            o.as_ptr(),
+            &mut tid,
+            why.as_mut_ptr(),
+            why.len(),
+        )
+    } {
         Ok(())
     } else {
         Err(cstr(&why))
@@ -153,17 +192,30 @@ pub fn package_setup(package: &Path, update: Option<&Path>, keys: &Path, out_dir
 }
 
 pub fn package_info(package: &Path, keys: &Path) -> Result<Package, String> {
-    let (p, k) = (cpath(package).ok_or("bad path")?, cpath(keys).ok_or("bad path")?);
+    let (p, k) = (
+        cpath(package).ok_or("bad path")?,
+        cpath(keys).ok_or("bad path")?,
+    );
     let mut out: NxmPackage = unsafe { std::mem::zeroed() };
     let mut why = [0 as c_char; 256];
-    if !unsafe { nxm_package_info(p.as_ptr(), k.as_ptr(), &mut out, why.as_mut_ptr(), why.len()) } {
+    if !unsafe {
+        nxm_package_info(
+            p.as_ptr(),
+            k.as_ptr(),
+            &mut out,
+            why.as_mut_ptr(),
+            why.len(),
+        )
+    } {
         return Err(cstr(&why));
     }
     let icon = (!out.icon.is_null() && out.icon_size > 0)
         .then(|| unsafe { std::slice::from_raw_parts(out.icon, out.icon_size) }.to_vec());
     let r = Package {
         title_id: format!("{:016x}", out.title_id),
-        build_id: out.has_build_id.then(|| out.build_id.iter().map(|b| format!("{b:02x}")).collect()),
+        build_id: out
+            .has_build_id
+            .then(|| out.build_id.iter().map(|b| format!("{b:02x}")).collect()),
         name: cstr(&out.name),
         publisher: cstr(&out.publisher),
         version: cstr(&out.version),

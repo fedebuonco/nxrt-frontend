@@ -1,0 +1,8 @@
+node_modules
+web-dist
+dist
+src-tauri/target
+src-tauri/nxrt
+nxrt
+assets
+package-lock.json

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>nxrt</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="logo">nx</span><span class="word">nxrt</span></div>
+        <nav id="nav" class="nav" aria-label="Sections"></nav>
+        <div id="update" class="update-slot" hidden></div>
+        <div class="side-foot">
+          <div id="pad" class="pad-slot"></div>
+          <div id="keys" class="keys"></div>
+          <button
+            class="donate"
+            type="button"
+            data-act="donate"
+            title="Support nxrt on Ko-fi"
+            aria-label="Donate on Ko-fi"
+          >
+            <span class="donate-heart">♥</span><span>Donate</span>
+          </button>
+        </div>
+      </aside>
+      <main id="main" class="main" tabindex="-1"></main>
+    </div>
+    <div id="pad-hints" class="pad-hints" hidden></div>
+    <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+    <dialog id="sheet" class="sheet" aria-labelledby="sheet-title"></dialog>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

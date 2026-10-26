@@ -2,10 +2,10 @@
 //!
 //! The window gets buttons as *positions* (south, east, north, west) and the stick as a direction, so it can label
 //! the hints the way the connected pad does (Nintendo's bottom button is B, Xbox's is A).
-use crate::commands::{PadStatus, Shared};
+use crate::state::{PadStatus, Shared};
 use gilrs::{Axis, Button, EventType, Gilrs};
-use std::time::Duration;
 use serde::Serialize;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 #[derive(Serialize, Clone)]
@@ -31,7 +31,15 @@ pub fn start(app: AppHandle, shared: Shared) {
             Ok(g) => g,
             Err(e) => {
                 tracing::error!(target: "pads", error = %e, "gamepads could not start");
-                publish(&app, &shared, PadStatus { connected: false, name: None, error: Some(format!("{e}")) });
+                publish(
+                    &app,
+                    &shared,
+                    PadStatus {
+                        connected: false,
+                        name: None,
+                        error: Some(format!("{e}")),
+                    },
+                );
                 return;
             }
         };
@@ -47,11 +55,19 @@ pub fn start(app: AppHandle, shared: Shared) {
         let (mut lt, mut rt) = (false, false);
         loop {
             // (blocking: a GUI has no event loop of its own to spin)
-            let Some(ev) = gilrs.next_event_blocking(Some(Duration::from_millis(500))) else { continue };
+            let Some(ev) = gilrs.next_event_blocking(Some(Duration::from_millis(500))) else {
+                continue;
+            };
             match ev.event {
                 EventType::ButtonPressed(b, _) => {
                     if let Some(name) = button_name(b) {
-                        let _ = app.emit("pad-button", PadButton { button: name.into(), pressed: true });
+                        let _ = app.emit(
+                            "pad-button",
+                            PadButton {
+                                button: name.into(),
+                                pressed: true,
+                            },
+                        );
                     }
                     // (some pads report their triggers only as buttons: keep the trigger state in step)
                     match b {
@@ -62,7 +78,13 @@ pub fn start(app: AppHandle, shared: Shared) {
                 }
                 EventType::ButtonReleased(b, _) => {
                     if let Some(name) = button_name(b) {
-                        let _ = app.emit("pad-button", PadButton { button: name.into(), pressed: false });
+                        let _ = app.emit(
+                            "pad-button",
+                            PadButton {
+                                button: name.into(),
+                                pressed: false,
+                            },
+                        );
                     }
                     match b {
                         Button::LeftTrigger2 => set_trigger(&app, "left", false, &mut lt),
@@ -89,12 +111,12 @@ pub fn start(app: AppHandle, shared: Shared) {
                     lx = 0.0;
                     ly = 0.0;
                     let first = status(&gilrs);
-        if first.connected {
-            tracing::info!(target: "pads", name = ?first.name, "controller connected at start");
-        } else {
-            tracing::info!(target: "pads", "no controller at start");
-        }
-        publish(&app, &shared, first);
+                    if first.connected {
+                        tracing::info!(target: "pads", name = ?first.name, "controller connected at start");
+                    } else {
+                        tracing::info!(target: "pads", "no controller at start");
+                    }
+                    publish(&app, &shared, first);
                 }
                 _ => {}
             }
@@ -108,7 +130,11 @@ fn stick(app: &AppHandle, x: f32, y: f32, last: &mut String) {
     let dir = if x.abs() < DEAD && y.abs() < DEAD {
         ""
     } else if x.abs() > y.abs() {
-        if x < 0.0 { "left" } else { "right" }
+        if x < 0.0 {
+            "left"
+        } else {
+            "right"
+        }
     } else if y < 0.0 {
         "up"
     } else {
@@ -116,20 +142,35 @@ fn stick(app: &AppHandle, x: f32, y: f32, last: &mut String) {
     };
     if dir != last.as_str() {
         *last = dir.to_string();
-        let _ = app.emit("pad-dir", PadDir { dir: dir.to_string() });
+        let _ = app.emit(
+            "pad-dir",
+            PadDir {
+                dir: dir.to_string(),
+            },
+        );
     }
 }
 
 fn set_trigger(app: &AppHandle, side: &str, pressed: bool, state: &mut bool) {
     if *state != pressed {
         *state = pressed;
-        let _ = app.emit("pad-trigger", PadTrigger { side: side.into(), pressed });
+        let _ = app.emit(
+            "pad-trigger",
+            PadTrigger {
+                side: side.into(),
+                pressed,
+            },
+        );
     }
 }
 
 fn status(g: &Gilrs) -> PadStatus {
     let name = g.gamepads().next().map(|(_, gp)| gp.name().to_string());
-    PadStatus { connected: g.gamepads().count() > 0, name, error: None }
+    PadStatus {
+        connected: g.gamepads().count() > 0,
+        name,
+        error: None,
+    }
 }
 
 fn publish(app: &AppHandle, shared: &Shared, s: PadStatus) {

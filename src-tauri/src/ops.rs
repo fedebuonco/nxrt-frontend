@@ -8,25 +8,43 @@ use std::path::{Path, PathBuf};
 
 /// The keys for a package: the chosen prod.keys, else one beside the package or in ~/.switch.
 pub fn keys_for(chosen: Option<&Path>, package: &Path) -> Option<PathBuf> {
-    chosen.filter(|k| k.is_file()).map(Path::to_path_buf).or_else(|| manage::find_keys(package))
+    chosen
+        .filter(|k| k.is_file())
+        .map(Path::to_path_buf)
+        .or_else(|| manage::find_keys(package))
 }
 
 /// The package's game into the list: its control data read, its icon kept, the app in the list that runs it (same
 /// title id) given it. Returns the game's index.
-pub fn add_package_to(games: &mut Vec<Entry>, package: &Path, keys: &Path) -> Result<usize, String> {
-    let p = manage::package_info(package, keys).map_err(|e| format!("{}: {e}", package.display()))?;
+pub fn add_package_to(
+    games: &mut Vec<Entry>,
+    package: &Path,
+    keys: &Path,
+) -> Result<usize, String> {
+    let p =
+        manage::package_info(package, keys).map_err(|e| format!("{}: {e}", package.display()))?;
     if let Some(icon) = &p.icon {
         let path = library::icon_path(&p.title_id);
         let _ = std::fs::create_dir_all(path.parent().unwrap());
         let _ = std::fs::write(&path, icon);
     }
-    if let Some(i) = games.iter().position(|g| g.package.as_deref() == Some(package) || g.update.as_deref() == Some(package)) {
+    if let Some(i) = games
+        .iter()
+        .position(|g| g.package.as_deref() == Some(package) || g.update.as_deref() == Some(package))
+    {
         return Ok(i); // (already here)
     }
     // base game and update pair up (the same title; an update's id differs in its low bits)
     let base_tid = |t: &str| u64::from_str_radix(t, 16).map(|v| v & !0xFFF).unwrap_or(0);
     let same = |t: &str| !t.is_empty() && base_tid(t) == base_tid(&p.title_id);
-    let partner = games.iter().position(|g| same(&g.title_id) && if p.is_update { g.update.is_none() } else { g.package.is_none() && g.update.is_some() });
+    let partner = games.iter().position(|g| {
+        same(&g.title_id)
+            && if p.is_update {
+                g.update.is_none()
+            } else {
+                g.package.is_none() && g.update.is_some()
+            }
+    });
     if let Some(i) = partner {
         let e = &mut games[i];
         if p.is_update {
@@ -45,7 +63,9 @@ pub fn add_package_to(games: &mut Vec<Entry>, package: &Path, keys: &Path) -> Re
     // the game's app: an entry whose app runs this title (and has no package yet)
     let app = games.iter().position(|g| {
         g.package.is_none()
-            && g.exe.as_ref().is_some_and(|e| runner::describe(e).is_ok_and(|d| d.title_id.eq_ignore_ascii_case(&p.title_id)))
+            && g.exe.as_ref().is_some_and(|e| {
+                runner::describe(e).is_ok_and(|d| d.title_id.eq_ignore_ascii_case(&p.title_id))
+            })
     });
     let i = match app {
         Some(i) => i,
@@ -71,16 +91,29 @@ pub fn add_package_to(games: &mut Vec<Entry>, package: &Path, keys: &Path) -> Re
 
 /// A new recomp for a game added from its package (recomp.rs): its game files set up from the package into
 /// <dir>/data/extracted, its folder written. Its app is built next by the caller.
-pub fn create_recomp(e: &Entry, id: &str, dir: &Path, nxrt: &Path, keys: &Path) -> Result<(), String> {
+pub fn create_recomp(
+    e: &Entry,
+    id: &str,
+    dir: &Path,
+    nxrt: &Path,
+    keys: &Path,
+) -> Result<(), String> {
     tracing::info!(target: "recomp", id = %id, dir = %dir.display(), "recomp: reading the package");
     if !recomp::valid_id(id) {
         return Err("The id is a short name in lower-case letters and digits (it names the app: <id>recomp)".into());
     }
     if !nxrt.join("nxrt.mk").is_file() {
-        return Err(format!("{}: not an nxrt checkout (no nxrt.mk)", nxrt.display()));
+        return Err(format!(
+            "{}: not an nxrt checkout (no nxrt.mk)",
+            nxrt.display()
+        ));
     }
     let Some(pkg) = &e.package else {
-        return Err(if e.update.is_some() { "This is the game's update: add its base game first".into() } else { "No package for this game".into() });
+        return Err(if e.update.is_some() {
+            "This is the game's update: add its base game first".into()
+        } else {
+            "No package for this game".into()
+        });
     };
     if dir.join("Makefile").exists() {
         return Err(format!("{} already has a recomp", dir.display()));
@@ -129,8 +162,11 @@ pub fn open_donate() -> Result<(), String> {
 fn open_browser(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open").arg(url).spawn().map_err(|e| format!("open: {e}"))?;
-        return Ok(());
+        std::process::Command::new("open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| format!("open: {e}"))?;
+        Ok(())
     }
     #[cfg(not(target_os = "macos"))]
     {

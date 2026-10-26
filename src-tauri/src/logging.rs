@@ -36,7 +36,10 @@ pub fn init() {
         .with_target(true)
         .with_file(true)
         .with_line_number(true);
-    let stderr_layer = fmt::layer().with_writer(std::io::stderr).with_ansi(true).with_target(true);
+    let stderr_layer = fmt::layer()
+        .with_writer(std::io::stderr)
+        .with_ansi(true)
+        .with_target(true);
     let _ = tracing_subscriber::registry()
         .with(filter)
         .with(file_layer)
@@ -60,7 +63,10 @@ pub fn new_run_id() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    format!("r{secs}-{:03}", RUN_SEQ.fetch_add(1, Ordering::Relaxed) % 1000)
+    format!(
+        "r{secs}-{:03}",
+        RUN_SEQ.fetch_add(1, Ordering::Relaxed) % 1000
+    )
 }
 
 pub fn info() -> crate::api::LogInfo {
@@ -80,7 +86,11 @@ pub fn manager_log_path() -> Option<PathBuf> {
         if !name.starts_with("manager.log") {
             continue;
         }
-        let modified = entry.metadata().ok().and_then(|m| m.modified().ok()).unwrap_or(UNIX_EPOCH);
+        let modified = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .unwrap_or(UNIX_EPOCH);
         if best.as_ref().is_none_or(|(t, _)| modified > *t) {
             best = Some((modified, entry.path()));
         }
@@ -109,7 +119,9 @@ pub fn manager_log(lines: usize) -> ManagerLog {
 
 /// The last `max` lines of a log, reading at most its last 128 KiB; lines are capped so one bad line cannot fill the UI.
 pub fn tail(path: &Path, max: usize) -> Vec<String> {
-    let Ok(mut f) = std::fs::File::open(path) else { return Vec::new() };
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
     let len = f.metadata().map(|m| m.len()).unwrap_or(0);
     let start = len.saturating_sub(128 * 1024);
     if f.seek(SeekFrom::Start(start)).is_err() {
@@ -122,7 +134,7 @@ pub fn tail(path: &Path, max: usize) -> Vec<String> {
     let text = String::from_utf8_lossy(&buf);
     let mut lines: Vec<&str> = text.lines().collect();
     if start > 0 && !lines.is_empty() {
-        lines.remove(0);  // (the first line may be cut mid-way)
+        lines.remove(0); // (the first line may be cut mid-way)
     }
     lines
         .iter()
@@ -181,9 +193,13 @@ mod tests {
 
     #[test]
     fn tail_reads_the_last_lines() {
-        let path = std::env::temp_dir().join(format!("nxrt-manager-tail-{}.log", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("nxrt-manager-tail-{}.log", std::process::id()));
         std::fs::write(&path, "one\ntwo\nthree\nfour\n").unwrap();
-        assert_eq!(tail(&path, 2), vec!["three".to_string(), "four".to_string()]);
+        assert_eq!(
+            tail(&path, 2),
+            vec!["three".to_string(), "four".to_string()]
+        );
         assert_eq!(tail(&path, 10).len(), 4);
         assert!(tail(&path.with_extension("missing"), 2).is_empty());
         let _ = std::fs::remove_file(&path);

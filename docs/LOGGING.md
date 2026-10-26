@@ -20,11 +20,11 @@ and structured event fields in the UI.
 
 `~/Library/Application Support/nxrt-frontend/logs/`:
 
-| File | What |
-| --- | --- |
-| `manager.log.YYYY-MM-DD` | the manager's own log (daily; older than seven days are pruned on start) |
-| `<app-id>-<time>.log` | a run's log: the game/step's stdout and stderr |
-| `<app-id>-<step>-<time>.log` | a setup step's log |
+| File                         | What                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `manager.log.YYYY-MM-DD`     | the manager's own log (daily; older than seven days are pruned on start) |
+| `<app-id>-<time>.log`        | a run's log: the game/step's stdout and stderr                           |
+| `<app-id>-<step>-<time>.log` | a setup step's log                                                       |
 
 The file names use the app id from `--describe`; the issue form's **Logs** section picks the newest one for that app.
 

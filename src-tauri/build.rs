@@ -5,17 +5,26 @@ fn main() {
     tauri_build::build();
 
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let nxrt = std::env::var_os("NXRT_DIR").map(PathBuf::from).unwrap_or_else(|| root.join("../nxrt"));
+    let nxrt = std::env::var_os("NXRT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("../nxrt"));
     let src = [
         nxrt.join("manage/nxrt_manage.c"),
         nxrt.join("runtime/nxpkg.c"),
         nxrt.join("runtime/lz4_block.c"),
     ];
     for f in &src {
-        assert!(f.exists(), "{} missing: git submodule update --init (or set NXRT_DIR)", f.display());
+        assert!(
+            f.exists(),
+            "{} missing: git submodule update --init (or set NXRT_DIR)",
+            f.display()
+        );
         println!("cargo:rerun-if-changed={}", f.display());
     }
-    println!("cargo:rerun-if-changed={}", nxrt.join("manage/nxrt_manage.h").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        nxrt.join("manage/nxrt_manage.h").display()
+    );
     println!("cargo:rerun-if-env-changed=NXRT_DIR");
     cc::Build::new()
         .files(&src)
