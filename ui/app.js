@@ -32,6 +32,9 @@
     loadTimer: 0,
     pad: { connected: false, name: null, error: null },
     padMode: false,
+    padTest: false,
+    padHeld: new Set(),
+    padLast: null,
     focusSel: null,
     pendingFocus: null,
     wantFocusFirst: false,
@@ -571,6 +574,144 @@
     return `<div style="margin-top:16px"><button class="btn danger" data-act="remove">Remove from the library</button></div>`;
   }
 
+
+  // ---- controller map: the pad, its lit buttons and the bindings it sends ------------------------------------------
+  // (the nxrt built-in defaults, as input -> host; the global defaults override them; a game's Controls may differ)
+  const DEFAULT_PAD_BINDINGS = {
+    a: 'east', b: 'south', x: 'north', y: 'west',
+    l: 'lshoulder', r: 'rshoulder', zl: 'ltrigger', zr: 'rtrigger',
+    plus: 'start', minus: 'back', lstick: 'lstick', rstick: 'rstick',
+    left: 'dpad_left', up: 'dpad_up', right: 'dpad_right', down: 'dpad_down',
+  };
+  const TEST_HOST = {
+    south: 'south', east: 'east', north: 'north', west: 'west',
+    lb: 'lshoulder', rb: 'rshoulder', lt: 'ltrigger', rt: 'rtrigger',
+    start: 'start', select: 'back', mode: 'guide', l3: 'lstick', r3: 'rstick',
+    up: 'dpad_up', down: 'dpad_down', left: 'dpad_left', right: 'dpad_right',
+  };
+  const ctrlInputLabel = (k) => (CTRL_INPUTS.find(([x]) => x === k) || [k, k])[1];
+  function effectivePadMap() {
+    return { ...DEFAULT_PAD_BINDINGS, ...((S.snap && S.snap.controls && S.snap.controls.bind_pad) || {}) };
+  }
+  function inputsForHost(host) {
+    const m = effectivePadMap();
+    return Object.keys(m).filter((k) => m[k] === host);
+  }
+  function hostName(host) {
+    const L = padLabels(S.pad.name);
+    switch (host) {
+      case 'south': return `Bottom (${L.south})`;
+      case 'east': return `Right (${L.east})`;
+      case 'north': return `Top (${L.north})`;
+      case 'west': return `Left (${L.west})`;
+      case 'lshoulder': return 'LB / L1';
+      case 'rshoulder': return 'RB / R1';
+      case 'ltrigger': return 'LT / L2';
+      case 'rtrigger': return 'RT / R2';
+      case 'back': return 'Back / Minus';
+      case 'start': return 'Start / Plus';
+      case 'guide': return 'Guide';
+      case 'lstick': return 'Left stick press';
+      case 'rstick': return 'Right stick press';
+      case 'dpad_up': return 'D-pad Up';
+      case 'dpad_down': return 'D-pad Down';
+      case 'dpad_left': return 'D-pad Left';
+      case 'dpad_right': return 'D-pad Right';
+      default: return host;
+    }
+  }
+  function padTestCaption() {
+    if (!S.pad.connected) return 'Connect a controller to test its buttons.';
+    if (!S.padLast) return S.padTest ? 'Press any button…' : 'Press Test, then a button.';
+    const inputs = inputsForHost(S.padLast).map(ctrlInputLabel).join(', ');
+    return `${esc(hostName(S.padLast))} <span class="arrow">→</span> ${inputs ? `<b>${esc(inputs)}</b>` : '<span class="muted">not bound</span>'}`;
+  }
+  function controllerSvg() {
+    const L = padLabels(S.pad.name);
+    const mapped = (host) => inputsForHost(host).map(ctrlInputLabel).join(' · ') || '–';
+    const on = (host) => (S.padHeld.has(host) ? ' on' : '');
+    const group = (host, inner) => `<g class="pad-host${on(host)}" data-host="${host}">${inner}</g>`;
+    const face = (host, x, y, glyph) =>
+      group(host, `<circle class="pad-btn" cx="${x}" cy="${y}" r="16"/><text class="pad-glyph" x="${x}" y="${y + 4}" text-anchor="middle">${esc(glyph)}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 29}" text-anchor="middle">${esc(mapped(host))}</text>`);
+    const shoulder = (host, x, label) =>
+      group(host, `<rect class="pad-shoulder" x="${x}" y="70" width="118" height="20" rx="10"/><text class="pad-key" x="${x + 11}" y="84">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 107}" y="84" text-anchor="end">${esc(mapped(host))}</text>`);
+    const trigger = (host, x, label) =>
+      group(host, `<rect class="pad-trigger" x="${x}" y="48" width="82" height="16" rx="8"/><text class="pad-key" x="${x + 10}" y="59">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 72}" y="59" text-anchor="end">${esc(mapped(host))}</text>`);
+    const stick = (host, x, y, label) =>
+      group(host, `<circle class="pad-stick-out" cx="${x}" cy="${y}" r="28"/><circle class="pad-stick-in" cx="${x}" cy="${y}" r="19"/><text class="pad-glyph" x="${x}" y="${y + 3}" text-anchor="middle" font-size="8">${label}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 45}" text-anchor="middle">${esc(mapped(host))}</text>`);
+    const dir = (host, x, y, w, h) => group(host, `<rect class="pad-dir" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/>`);
+    const pill = (host, x, glyph) =>
+      group(host, `<rect class="pad-btn" x="${x}" y="110" width="24" height="13" rx="6.5"/><text class="pad-glyph" x="${x + 12}" y="120" text-anchor="middle" font-size="8">${glyph}</text><text class="pad-map" data-map="${host}" x="${x + 12}" y="134" text-anchor="middle">${esc(mapped(host))}</text>`);
+    return `<svg viewBox="0 0 560 350" role="img" aria-label="Controller with its button bindings">
+      <path class="pad-body" d="M132 92 C78 92 58 136 66 206 C74 278 108 316 150 306 C192 296 205 252 232 244 L328 244 C355 252 368 296 410 306 C452 316 486 278 494 206 C502 136 482 92 428 92 Z"/>
+      ${trigger('ltrigger', 120, 'LT')}${trigger('rtrigger', 358, 'RT')}
+      ${shoulder('lshoulder', 102, 'LB')}${shoulder('rshoulder', 340, 'RB')}
+      ${stick('lstick', 176, 156, 'L3')}${stick('rstick', 348, 245, 'R3')}
+      ${dir('dpad_up', 166, 223, 20, 22)}${dir('dpad_down', 166, 265, 20, 22)}
+      ${dir('dpad_left', 146, 245, 22, 20)}${dir('dpad_right', 184, 245, 22, 20)}
+      <rect class="pad-dir-core" x="166" y="245" width="20" height="20" rx="3"/>
+      ${pill('back', 238, '⧉')}${pill('start', 298, '☰')}
+      ${group('guide', '<circle class="pad-guide" cx="280" cy="88" r="10"/>')}
+      ${face('north', 392, 118, L.north)}${face('east', 436, 162, L.east)}
+      ${face('south', 392, 206, L.south)}${face('west', 348, 162, L.west)}
+    </svg>`;
+  }
+  function controllerMapCard() {
+    const connected = S.pad.connected;
+    return `<section class="card setting controller-map-card">
+      <div class="setting-head">
+        <span class="section-title">Controller map</span>
+        ${connected ? pill(S.pad.name || 'connected', 'ok') : pill('none connected', 'muted')}
+        <span class="spacer"></span>
+        <button class="btn secondary sm" data-act="${S.padTest ? 'pad-test-stop' : 'pad-test'}" ${connected ? '' : 'disabled'}>${S.padTest ? 'Stop' : 'Test'}</button>
+      </div>
+      <p>${S.padTest ? 'Press any button on the controller; the map lights and the line below names the nxrt input it sends. Esc or Stop finishes.' : 'Your controller defaults at a glance: the large label is the pad’s button, the small one the nxrt input it sends. Test to light each button as you press it.'}</p>
+      <div class="controller-map">${controllerSvg()}</div>
+      <div class="pad-test-caption">${padTestCaption()}</div>
+      <p class="small">A game's Controls can override these. The diagram covers the face, shoulders, triggers, sticks and D-pad; paddles and touchpads are in the bindings list below.</p>
+    </section>`;
+  }
+  function updatePadMap() {
+    const root = document.querySelector('.controller-map');
+    if (root) {
+      root.querySelectorAll('[data-host]').forEach((el) => el.classList.toggle('on', S.padHeld.has(el.dataset.host)));
+      root.querySelectorAll('[data-map]').forEach((el) => {
+        const inputs = inputsForHost(el.dataset.map).map(ctrlInputLabel).join(' · ');
+        el.textContent = inputs || '–';
+      });
+    }
+    const cap = document.querySelector('.pad-test-caption');
+    if (cap) cap.innerHTML = padTestCaption();
+  }
+  function testPadPress(name, pressed) {
+    const host = TEST_HOST[name];
+    if (!host) return;
+    if (pressed) {
+      S.padHeld.add(host);
+      S.padLast = host;
+    } else {
+      S.padHeld.delete(host);
+    }
+    updatePadMap();
+  }
+  function startPadTest() {
+    if (!S.pad.connected) return toast('Connect a controller first', 'warn');
+    S.padTest = true;
+    S.padHeld.clear();
+    S.padLast = null;
+    stopRepeat();
+    heldDirs.clear();
+    render();
+    renderHints();
+  }
+  function stopPadTest() {
+    S.padTest = false;
+    S.padHeld.clear();
+    S.padLast = null;
+    render();
+    renderHints();
+  }
+
   // ---- logs -----------------------------------------------------------------------------------------------------
 
   function viewLogs() {
@@ -735,6 +876,7 @@
           <p class="small">If a connected controller isn't seen, allow Input Monitoring for nxrt in System Settings › Privacy &amp; Security.</p>
           ${padHelpGrid()}
         </section>
+        ${controllerMapCard()}
         ${controlsDefaultsCard()}
         <section class="card setting">
           <div class="setting-head"><span class="section-title">New recomps</span></div>
@@ -890,6 +1032,11 @@
   }
 
   function go(view, key = null) {
+    if (S.padTest && view !== 'settings') {
+      S.padTest = false;
+      S.padHeld.clear();
+      S.padLast = null;
+    }
     S.view = view;
     S.key = key;
     if (S.padMode) {
@@ -1210,6 +1357,7 @@
         key: form.dataset.key || null,
         controls: collectControls(form),
       });
+      if (form.dataset.scope === 'defaults') updatePadMap();
     } catch (e) {
       toast(errText(e), 'error');
       load(true);
@@ -1304,6 +1452,10 @@
         return go('logs');
       case 'donate':
         return openDonate();
+      case 'pad-test':
+        return startPadTest();
+      case 'pad-test-stop':
+        return stopPadTest();
       case 'pad-help':
         return helpSheet();
       case 'issue':
@@ -1587,6 +1739,11 @@
       el.hidden = true;
       return;
     }
+    if (S.padTest) {
+      el.innerHTML = `<span class="pad-mini">${ICONS.pad}</span><span class="pad-name">${esc(S.pad.name || 'Controller')}</span><span class="pad-sep"></span><span class="hint">Press any button</span>${hint('Esc', 'Stop')}`;
+      el.hidden = false;
+      return;
+    }
     const L = padLabels(S.pad.name);
     let parts = [];
     if (S.view === 'game') {
@@ -1642,6 +1799,7 @@
   function padButton(name, pressed) {
     // (the manager only listens while its window is the one in front: a pad in a running game is the game's)
     if (!document.hasFocus()) return;
+    if (S.padTest) return testPadPress(name, pressed);
     padWake();
     if (name === 'up' || name === 'down' || name === 'left' || name === 'right') {
       if (pressed) {
@@ -1680,6 +1838,7 @@
 
   function padDir(dir) {
     if (!document.hasFocus()) return;
+    if (S.padTest) return;
     padWake();
     if (dir) {
       const sel = document.activeElement;
@@ -1697,6 +1856,7 @@
 
   function padTrigger(side, pressed) {
     if (!document.hasFocus()) return;
+    if (S.padTest) return testPadPress(side === 'left' ? 'lt' : 'rt', pressed);
     padWake();
     if (pressed) {
       if (scrollTimers[side]) return;
@@ -1817,6 +1977,11 @@
       const next = event.payload || { connected: false, name: null, error: null };
       const was = S.pad && S.pad.connected;
       S.pad = next;
+      if (!next.connected && S.padTest) {
+        S.padTest = false;
+        S.padHeld.clear();
+        S.padLast = null;
+      }
       if (!next.connected) {
         heldDirs.clear();
         stopRepeat();
@@ -1853,6 +2018,13 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.defaultPrevented) return;
+      if (S.padTest) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          stopPadTest();
+        }
+        return;
+      }
       if (sheet.open) {
         if (e.key === 'Escape') closeSheet();
         return;
@@ -1976,6 +2148,8 @@
         return;
       }
       if (rest === 'settings') {
+        S.padHeld = new Set(['south', 'ltrigger', 'dpad_up']);
+        S.padLast = 'south';
         go('settings');
         setTimeout(() => padWake(), 120);
         return;

@@ -89,7 +89,9 @@ button is B, Xbox's is A, PlayStation's is ✕.
 | Select / Back | the controls sheet |
 
 The hints bar at the foot of the window always shows the current map; **Select** opens the full one, and Settings has the
-map too. D-pad navigation is spatial: in the grid it moves between cards, and on a game page the first focus is the main
+map too. **Settings → Controller map** draws the pad with the effective nxrt binding on each button: press **Test** and
+each button lights as you press it, with the name of the input it sends. The map is your global defaults; a game's
+Controls can override it. D-pad navigation is spatial: in the grid it moves between cards, and on a game page the first focus is the main
 action (Play, Stop, or the next step).
 
 If a connected pad isn't seen, allow **Input Monitoring** for nxrt in System Settings › Privacy & Security (macOS gates

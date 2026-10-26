@@ -604,3 +604,28 @@ body.pad-on .page { padding-bottom: 86px; }
 .donate.pad-focus { color: var(--accent); opacity: 1; }
 .donate-heart { font-size: 9px; color: var(--muted); }
 .donate:hover .donate-heart { color: var(--red); }
+
+/* controller map and its test */
+.controller-map-card .controller-map { max-width: 520px; margin: 10px auto 0; }
+.controller-map svg { display: block; width: 100%; height: auto; }
+.pad-body { fill: #171b21; stroke: var(--line-hi); stroke-width: 1.4; }
+.pad-shoulder, .pad-trigger { fill: #1f242c; stroke: var(--line-hi); stroke-width: 1.2; }
+.pad-btn, .pad-guide, .pad-dir { fill: #2a303a; stroke: var(--line-hi); stroke-width: 1.1; transition: fill .09s ease, stroke .09s ease; }
+.pad-stick-out { fill: #1c2028; stroke: var(--line-hi); stroke-width: 1.2; transition: stroke .09s ease; }
+.pad-stick-in { fill: #2a303a; stroke: var(--line); transition: fill .09s ease, stroke .09s ease; }
+.pad-glyph { fill: var(--sub); font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.pad-key { fill: var(--sub); font-family: var(--mono); font-size: 8.5px; font-weight: 600; letter-spacing: .04em; }
+.pad-map { fill: var(--muted); font-family: var(--mono); font-size: 7.5px; letter-spacing: .03em; }
+.pad-dir-core { fill: #20252e; }
+.pad-host.on .pad-btn, .pad-host.on .pad-guide, .pad-host.on .pad-dir,
+.pad-host.on .pad-shoulder, .pad-host.on .pad-trigger, .pad-host.on .pad-stick-in {
+  fill: var(--accent); stroke: var(--accent-hi);
+}
+.pad-host.on .pad-glyph, .pad-host.on .pad-key { fill: var(--on-accent); }
+.pad-host.on .pad-map { fill: var(--accent); }
+.pad-host.on .pad-stick-out { stroke: var(--accent); }
+.pad-test-caption { min-height: 17px; margin-top: 10px; text-align: center; font-size: 11px; color: var(--sub); }
+.pad-test-caption b { color: var(--accent); font-weight: 600; }
+.pad-test-caption .arrow { color: var(--muted); margin: 0 5px; }
+.controller-map-card .small { text-align: center; }
+.pad-host.on .pad-map-in { fill: var(--on-accent); }
