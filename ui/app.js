@@ -659,7 +659,7 @@
         ${controlsDefaultsCard()}
         <section class="card setting">
           <div class="setting-head"><span class="section-title">New recomps</span></div>
-          <p>Where Create a recomp puts them, and the nxrt checkout they build against (each can be changed when creating).</p>
+          <p>Where Create a recomp puts them. The nxrt source is built into the app; set <span class="mono">NXRT_DIR</span> to use another checkout while developing.</p>
           <div class="path">${esc(s.recomps_dir)}<br><span class="muted">nxrt</span>&nbsp; ${esc(s.nxrt_dir)}</div>
         </section>
         <section class="card setting">
@@ -733,10 +733,6 @@
         <div class="field">
           <label for="c-dir">Folder</label>
           <div class="row"><input id="c-dir" value="${esc(dir)}"><button class="btn secondary" data-act="browse-create-dir">Browse…</button></div>
-        </div>
-        <div class="field">
-          <label for="c-nxrt">nxrt</label>
-          <div class="row"><input id="c-nxrt" value="${esc(S.snap.nxrt_dir)}"><button class="btn secondary" data-act="browse-create-nxrt">Browse…</button></div>
         </div>
         <p class="hint" style="margin-bottom:0">Needs: the Xcode command line tools, Python 3, Homebrew's SDL3 and FFmpeg. The app builds in a minute or two; its game code is the next steps.</p>
         <div class="err" id="sheet-err" style="color:var(--red);font-size:11px;margin-top:8px"></div>
@@ -1088,14 +1084,13 @@
     if (!g) return;
     const id = sheet.querySelector('#c-id').value.trim();
     const dir = sheet.querySelector('#c-dir').value.trim();
-    const nxrt = sheet.querySelector('#c-nxrt').value.trim();
     const err = sheet.querySelector('#sheet-err');
     const btn = sheet.querySelector('[data-act="submit-create"]');
     err.textContent = '';
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Preparing…';
     try {
-      await invoke('create_recomp', { index: g.index, id, dir, nxrt });
+      await invoke('create_recomp', { index: g.index, id, dir });
       closeSheet();
       toast('Building the recomp’s app…', 'busy');
       queueLoad();
@@ -1246,11 +1241,6 @@
           sheet.querySelector('#c-dir').value = p;
           createDirTouched = true;
         }
-        return;
-      }
-      case 'browse-create-nxrt': {
-        const p = await invoke('pick_folder', { title: 'The nxrt checkout' });
-        if (p) sheet.querySelector('#c-nxrt').value = p;
         return;
       }
       case 'submit-app':

@@ -41,8 +41,9 @@ npm run dev       # tauri dev: builds the Rust app and opens the window
 `npm run build` makes an app bundle in `src-tauri/target/release/bundle/macos/` (unsigned: right-click → Open the first
 time). A local arm64 build is kept in [`dist/`](dist) — `nxrt-0.1.0-arm64.dmg`, ad-hoc signed and not notarized.
 
-`NXRT_DIR=<path>` builds against another nxrt checkout. `npm install` fetches the Tauri CLI and nothing else: the
-window has no bundler.
+The release build stages the nxrt submodule into the app (`Contents/Resources/nxrt`), so creating a recomp needs no
+checkout. `NXRT_DIR=<path>` at run time overrides that copy with another checkout (development). `npm install` fetches
+the Tauri CLI and nothing else: the window has no bundler.
 
 The window's files are embedded when the Rust app is built, so **restart `npm run dev` after editing `ui/`** (a plain
 window reload is not enough).
@@ -57,8 +58,8 @@ window reload is not enough).
    No recomp for it at all? **Create a recomp...** makes one from the package: an nxrt game folder (its Makefile with the
    code modules laid out from the NSOs' sizes, `runtime/<id>_game.c` with who the game is, `build.sh`), its game files set
    up in its `data/` folder, and its app built (the generator's Python environment, then `make`). A plain recompilation,
-   nothing game-specific yet: a port starts from there. Needs Python 3, Homebrew's SDL3 and FFmpeg, and an nxrt checkout
-   (default: this app's own submodule).
+   nothing game-specific yet: a port starts from there. Needs Python 3, Homebrew's SDL3 and FFmpeg; the nxrt source is
+   built into the app.
 3. The steps to play it, each asked for when it is next:
    - **Game files**: set up from the package (seconds: the package is read in place, nothing is copied);
    - **Generate the game code**: the game's ARM code translated to C (`<app> --generate`);
@@ -170,6 +171,7 @@ The steps print `{"nxrt_progress":1,...}` lines and one `{"nxrt_setup":1,...}` r
 | `src-tauri/src/pads.rs` | controllers: gilrs → `pad-button` / `pad-dir` / `pad-trigger` / `pad-status` events |
 | `src-tauri/src/controls.rs` | controller defaults + per-game settings, and the `NXRT_CONTROLLER` overlay |
 | `src-tauri/src/issues.rs` | a game's prefilled nxrt GitHub issue (details, log tail, environment) |
+| `scripts/bundle-nxrt.sh` | stages the nxrt submodule into the app bundle for a release build |
 | `src-tauri/src/library.rs` | the library file and its `Entry`s |
 | `src-tauri/src/runner.rs` | running a game or a step, its log and progress |
 | `src-tauri/src/manage.rs` | packages, exefs, RomFS through libnxrt_manage |

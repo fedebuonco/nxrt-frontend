@@ -10,10 +10,26 @@ const GUEST_LO: u64 = 0x70_0000_0000;
 const HLE_BASE: u64 = 0x70_8000_0000;
 const MODULE_ALIGN: u64 = 0x200_0000;  // (32 MiB, as the ports lay them out)
 
-/// The nxrt checkout new recomps build against: NXRT_DIR at build time, else this app's own nxrt submodule.
+/// The nxrt source new recomps build against: NXRT_DIR at run time (development), else the copy bundled in the app,
+/// else this checkout's own submodule.
 pub fn default_nxrt() -> PathBuf {
-    let p = PathBuf::from(option_env!("NXRT_DIR").unwrap_or(concat!(env!("CARGO_MANIFEST_DIR"), "/../nxrt")));
+    if let Some(p) = std::env::var_os("NXRT_DIR").map(PathBuf::from) {
+        if p.join("nxrt.mk").is_file() {
+            return p.canonicalize().unwrap_or(p);
+        }
+    }
+    if let Some(p) = bundled_nxrt() {
+        return p;
+    }
+    let p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../nxrt"));
     p.canonicalize().unwrap_or(p)
+}
+
+/// The nxrt source beside the executable: <nxrt.app>/Contents/Resources/nxrt (the release bundle).
+fn bundled_nxrt() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let p = exe.parent()?.parent()?.join("Resources").join("nxrt");
+    p.join("nxrt.mk").is_file().then_some(p)
 }
 
 pub fn default_dir(id: &str) -> PathBuf {

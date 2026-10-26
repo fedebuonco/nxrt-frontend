@@ -506,7 +506,7 @@ pub fn stop(state: State<Shared>, key: String) {
 }
 
 #[tauri::command]
-pub async fn create_recomp(state: State<'_, Shared>, app: AppHandle, index: usize, id: String, dir: String, nxrt: String) -> Result<(), String> {
+pub async fn create_recomp(state: State<'_, Shared>, app: AppHandle, index: usize, id: String, dir: String) -> Result<(), String> {
     let sh = state.inner().clone();
     let (entry, keys) = {
         let lib = sh.library.lock().unwrap();
@@ -520,8 +520,9 @@ pub async fn create_recomp(state: State<'_, Shared>, app: AppHandle, index: usiz
             .ok_or("No keys: choose your prod.keys first")?;
         (e, k)
     };
-    let (id, dir, nxrt) = (id.trim().to_string(), PathBuf::from(dir.trim()), PathBuf::from(nxrt.trim()));
-    let (e2, id2, dir2, nxrt2, keys2) = (entry.clone(), id.clone(), dir.clone(), nxrt.clone(), keys.clone());
+    let (id, dir) = (id.trim().to_string(), PathBuf::from(dir.trim()));
+    let nxrt = recomp::default_nxrt();
+    let (e2, id2, dir2, nxrt2, keys2) = (entry.clone(), id.clone(), dir.clone(), nxrt, keys.clone());
     tauri::async_runtime::spawn_blocking(move || ops::create_recomp(&e2, &id2, &dir2, &nxrt2, &keys2)).await.map_err(|e| e.to_string())??;
     let key = api::game_key(&entry);
     let app_path = recomp::app_path(&dir, &id);

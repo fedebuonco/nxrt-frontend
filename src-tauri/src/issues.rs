@@ -20,15 +20,11 @@ pub struct Env {
 
 impl Env {
     pub fn detect(nxrt_dir: &Path) -> Env {
-        let rev = Command::new("git")
-            .arg("-C")
-            .arg(nxrt_dir)
-            .args(["rev-parse", "--short", "HEAD"])
-            .output()
+        let rev = std::fs::read_to_string(nxrt_dir.join(".nxrt-revision"))
             .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
+            .or_else(|| git_rev(nxrt_dir))
             .unwrap_or_else(|| "unknown".into());
         let macos = Command::new("sw_vers")
             .arg("-productVersion")
@@ -46,6 +42,24 @@ impl Env {
             arch: if std::env::consts::ARCH == "aarch64" { "arm64".into() } else { std::env::consts::ARCH.into() },
         }
     }
+}
+
+/// The checkout's HEAD, but only when it is that checkout's own repository (not the app repo around a staged copy).
+fn git_rev(dir: &Path) -> Option<String> {
+    let top = Command::new("git").arg("-C").arg(dir).args(["rev-parse", "--show-toplevel"]).output().ok()?;
+    if !top.status.success() {
+        return None;
+    }
+    let top = std::fs::canonicalize(String::from_utf8_lossy(&top.stdout).trim()).ok()?;
+    if top != std::fs::canonicalize(dir).ok()? {
+        return None;
+    }
+    let out = Command::new("git").arg("-C").arg(dir).args(["rev-parse", "--short", "HEAD"]).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let rev = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!rev.is_empty()).then_some(rev)
 }
 
 /// The prefilled URL for a game: its latest log in `logs_dir`, and the one-gather view the caller built.
