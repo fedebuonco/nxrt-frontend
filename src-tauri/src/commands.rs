@@ -336,7 +336,7 @@ fn finish(
                     _ => (
                         match &progress.failed {
                             Some(f) => {
-                                format!("The build stopped at {f} (its log is in the logs folder)")
+                                format!("The build stopped: {f}")
                             }
                             None => format!("The build {how}: see its log in the logs folder"),
                         },

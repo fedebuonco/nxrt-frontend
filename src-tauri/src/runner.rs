@@ -308,6 +308,11 @@ fn nx_event(progress: &Mutex<Progress>, line: &str) -> Option<String> {
                 g.run_cmd = Some(msg.clone());
             } else if msg.contains(crate::nxnative::RUN_COMMAND_FOLLOWS) {
                 g.nx_run_next = true;
+            } else if g.failed.is_none() {
+                // (a red line is what went wrong: the script says it before it stops)
+                if let Some(at) = msg.find("[RED] ") {
+                    g.failed = Some(msg[at + 6..].to_string());
+                }
             }
             Some(msg)
         }
@@ -819,6 +824,17 @@ echo "args: $*""#,
         assert_eq!(
             p.lock().unwrap().run_cmd.as_deref(),
             Some("cd /x/run && DM_ROMFS=/x/RomFS /x/tools/dmhost /x/patched_v0")
+        );
+        // (a red line is what went wrong, the first one)
+        let q = Mutex::new(Progress::default());
+        nx_event(
+            &q,
+            r#"{"ev":"say","msg":"[RED] more than one game in the folder, keep one game per folder: A, B"}"#,
+        );
+        nx_event(&q, r#"{"ev":"say","msg":"[RED] later"}"#);
+        assert_eq!(
+            q.lock().unwrap().failed.as_deref(),
+            Some("more than one game in the folder, keep one game per folder: A, B")
         );
         // (a later message is only a message)
         ev(r#"{"ev":"say","msg":"profile: registered"}"#);
