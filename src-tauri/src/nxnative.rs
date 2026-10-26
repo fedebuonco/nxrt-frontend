@@ -73,6 +73,31 @@ pub fn nsp_dir(e: &Entry) -> Option<PathBuf> {
     }
 }
 
+/// The file system a folder is on (statfs's name: apfs, exfat, msdos, hfs ...), None when it can't be read.
+pub fn fs_type(dir: &Path) -> Option<String> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    let name = unsafe { std::ffi::CStr::from_ptr(st.f_fstypename.as_ptr()) };
+    Some(name.to_string_lossy().into_owned())
+}
+
+/// Why a folder can't hold a game's nxnative build, if it can't: on exFAT or FAT macOS keeps each file's metadata in
+/// a "._<name>" file beside it, and nxnative's tools take those for game files (FE3H's shader split stopped on
+/// glslc_capture/._<hash>.glslc); its build also clones files, which APFS does.
+pub fn unsuitable(dir: &Path) -> Option<String> {
+    match fs_type(dir).as_deref() {
+        Some(t @ ("exfat" | "msdos")) => Some(format!(
+            "The game's NSP folder is on a {t} drive, where macOS writes ._ files that nxnative's tools read as game \
+             files: keep it on an APFS volume (on that drive, an APFS sparse bundle)"
+        )),
+        _ => None,
+    }
+}
+
 /// The base game's title ID as nxnative names its folders and profiles (16 upper-case hex digits).
 pub fn title_id(e: &Entry) -> Option<String> {
     let v = u64::from_str_radix(e.title_id.trim(), 16).ok()?;
@@ -141,6 +166,7 @@ mod tests {
         for d in ["/opt/homebrew/bin", "/usr/local/share/dotnet", "/usr/bin"] {
             assert!(p.split(':').any(|x| x == d), "{p}");
         }
+        assert!(super::unsuitable(std::path::Path::new("/")).is_none());
         // (Apple's clang before any other: /usr/bin is first)
         assert!(p.starts_with("/usr/bin:"), "{p}");
     }

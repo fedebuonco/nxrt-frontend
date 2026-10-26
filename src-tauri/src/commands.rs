@@ -729,6 +729,9 @@ pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<()
         return Err(format!("No nxnative checkout at {}", repo.display()));
     }
     let nsp = crate::nxnative::nsp_dir(&entry).ok_or("This game has no NSP folder")?;
+    if let Some(why) = crate::nxnative::unsuitable(&nsp) {
+        return Err(why);
+    }
     let package = entry
         .package
         .clone()
