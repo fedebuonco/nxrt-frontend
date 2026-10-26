@@ -25,29 +25,42 @@ pub fn python(repo: &Path) -> PathBuf {
     }
 }
 
-/// The PATH the build runs with: the app's own, then where Homebrew and the .NET installer put the tools the script
-/// needs (dotnet, spirv-cross, glslangValidator) - an app opened from Finder has only /usr/bin:/bin:/usr/sbin:/sbin.
+/// The PATH the build runs with: Apple's tools first (nxnative's host Makefile calls `clang`, and a Homebrew LLVM
+/// earlier in the user's PATH compiles against a Command Line Tools SDK that may not be there), then where Homebrew
+/// and the .NET installer put the tools the script needs (spirv-cross, dotnet, glslangValidator), then the app's own
+/// (an app opened from Finder has only /usr/bin:/bin:/usr/sbin:/sbin).
 pub fn tool_path() -> String {
-    let mut dirs: Vec<String> = std::env::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|d| !d.is_empty())
-        .map(String::from)
-        .collect();
-    for d in [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/usr/local/share/dotnet",
+    let mut dirs: Vec<String> = Vec::new();
+    let own = std::env::var("PATH").unwrap_or_default();
+    let first = [
         "/usr/bin",
         "/bin",
         "/usr/sbin",
         "/sbin",
-    ] {
-        if !dirs.iter().any(|x| x == d) {
-            dirs.push(d.to_string());
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/local/share/dotnet",
+    ];
+    for d in first
+        .iter()
+        .map(|d| d.to_string())
+        .chain(own.split(':').map(String::from))
+    {
+        if !d.is_empty() && !dirs.contains(&d) {
+            dirs.push(d);
         }
     }
     dirs.join(":")
+}
+
+/// The macOS SDK to compile against (xcrun's: the selected Xcode's), for the host the build makes.
+pub fn sdk_root() -> Option<String> {
+    let out = std::process::Command::new("/usr/bin/xcrun")
+        .args(["--sdk", "macosx", "--show-sdk-path"])
+        .output()
+        .ok()?;
+    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !p.is_empty()).then_some(p)
 }
 
 /// The game's NSP folder: the folder of its package (nxnative builds from a folder holding one game's NSPs).
@@ -128,5 +141,7 @@ mod tests {
         for d in ["/opt/homebrew/bin", "/usr/local/share/dotnet", "/usr/bin"] {
             assert!(p.split(':').any(|x| x == d), "{p}");
         }
+        // (Apple's clang before any other: /usr/bin is first)
+        assert!(p.starts_with("/usr/bin:"), "{p}");
     }
 }

@@ -398,6 +398,9 @@ impl Run {
             .args(["--platform", "mac", "--progress", "json"])
             .env("PATH", crate::nxnative::tool_path())
             .current_dir(repo);
+        if let Some(sdk) = crate::nxnative::sdk_root() {
+            c.env("SDKROOT", sdk);
+        }
         Run::spawn(c, nsp_dir, Kind::NxBuild, log_file, repaint)
     }
 
