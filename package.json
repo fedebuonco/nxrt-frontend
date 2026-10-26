@@ -16,7 +16,8 @@
     "test:unit": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:all": "npm run test:unit && npm run test:e2e"
+    "test:all": "npm run test:unit && npm run test:e2e",
+    "dmg": "sh scripts/make-dmg.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -21,6 +21,13 @@ If Chrome is not installed, either change `channel` in `playwright.config.js` to
 `npx playwright install chromium`, or install Chrome. The tests use Playwright's web server, so `npm run test:e2e` is
 self-contained.
 
+## CI
+
+`.github/workflows/ci.yml` has two jobs. **Window UI** runs `npm run test:e2e` on Ubuntu (system Chrome). **macOS ·
+checks + DMG** runs on an Apple-silicon runner: the Rust fmt/clippy/test checks, the window lint/format/unit checks,
+`npm run build`, `npm run dmg`, and uploads the DMG plus `SHA256SUMS` as the `nxrt-dmg` artifact. A `v*` tag also
+attaches those files to the GitHub release.
+
 ## Checks
 
 ```sh

@@ -1,5 +1,7 @@
 # nxrt-frontend
 
+[![CI](https://github.com/fedebuonco/nxrt-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/fedebuonco/nxrt-frontend/actions/workflows/ci.yml)
+
 One small manager for Switch games recompiled with [nxrt](https://github.com/fedebuonco/nxrt): your library, each
 game's files and game code, and Play.
 
@@ -35,6 +37,7 @@ cd nxrt-frontend
 npm install
 npm run dev       # Vite + Tauri, with hot reload
 npm run build     # stages nxrt, builds the window, makes the app
+npm run dmg       # packages the app into dist/nxrt-<version>-<arch>.dmg
 ```
 
 The app bundle lands in `src-tauri/target/release/bundle/macos/`. A local arm64 DMG is in
