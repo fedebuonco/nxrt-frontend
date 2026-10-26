@@ -1,4 +1,4 @@
 [submodule "nxrt"]
 	path = nxrt
 	url = https://github.com/fedebuonco/nxrt.git
-	branch = macos-core
+	branch = master
