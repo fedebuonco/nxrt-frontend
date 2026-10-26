@@ -1,6 +1,7 @@
 //! The window's side of the app: everything the web UI can ask for, plus the one thread per run that keeps it posted.
 use crate::api::{self, ExitInfo, RunInfo, Snapshot};
 use crate::controls::{self, Controls};
+use crate::issues;
 use crate::library::{self, Entry, Library};
 use crate::manage;
 use crate::ops;
@@ -415,6 +416,21 @@ pub fn start_game(state: State<Shared>, app: AppHandle, key: String, mode: Strin
     let id = runner::describe(&exe).map(|d| d.id).unwrap_or_else(|_| "game".into());
     let run = runner::Run::game(&exe, entry.data_root.as_deref(), mode == "play", log_file(&id, ""), || {}, overlay.as_deref())?;
     start(&state, &app, &key, run, String::new())
+}
+
+/// Opens the nxrt GitHub new-issue form with this game, its build, its latest log and the environment filled in.
+#[tauri::command]
+pub fn open_issue(state: State<Shared>, key: String) -> Result<(), String> {
+    let (index, entry) = {
+        let lib = state.library.lock().unwrap();
+        let (index, e) = lib.games.iter().enumerate().find(|(_, e)| api::game_key(e) == key).ok_or("No such game")?;
+        (index, e.clone())
+    };
+    let last = state.last.lock().unwrap().get(&key).cloned();
+    let g = api::Gathered::gather(&entry);
+    let view = api::view(index, &entry, &g, None, None, last);
+    let url = issues::for_game(&view, &recomp::default_nxrt(), &library::dir().join("logs"));
+    ops::open_url(&url)
 }
 
 /// Save the controller defaults (`scope = "defaults"`) or one game's overrides (`scope = "game"`, its key).

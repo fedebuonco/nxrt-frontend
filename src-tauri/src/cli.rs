@@ -1,5 +1,6 @@
 //! The command line (scripts, tests): the same library and steps as the window, without opening it.
 use crate::api;
+use crate::issues;
 use crate::library::{self, Library};
 use crate::ops;
 use crate::recomp;
@@ -28,6 +29,10 @@ pub fn run() -> Option<i32> {
     if let Some(i) = args.iter().position(|a| a == "--create") {
         return Some(create(&args, i));
     }
+    if let Some(i) = args.iter().position(|a| a == "--issue") {
+        let who = args.get(i + 1).map(String::as_str).unwrap_or("");
+        return Some(issue(who));
+    }
     if args.iter().any(|a| a == "--list") {
         list();
         return Some(0);
@@ -40,6 +45,25 @@ pub fn run() -> Option<i32> {
         return Some(add(&args, i));
     }
     None
+}
+
+/// `--issue <title id | app id | game key>`: the nxrt GitHub issue URL for a game, prefilled; printed, not opened
+fn issue(who: &str) -> i32 {
+    let lib = Library::load();
+    let Some((index, e)) = lib.games.iter().enumerate().find(|(_, e)| {
+        api::game_key(e) == who
+            || e.title_id.eq_ignore_ascii_case(who)
+            || e.exe.as_ref().is_some_and(|x| {
+                runner::describe(x).is_ok_and(|d| d.id == who || d.title_id.eq_ignore_ascii_case(who))
+            })
+    }) else {
+        eprintln!("{who}: not in the library");
+        return 2;
+    };
+    let g = api::Gathered::gather(e);
+    let v = api::view(index, e, &g, lib.keys.as_deref(), None, None);
+    println!("{}", issues::for_game(&v, &recomp::default_nxrt(), &library::dir().join("logs")));
+    0
 }
 
 /// `--list`: every game of the library and how it stands

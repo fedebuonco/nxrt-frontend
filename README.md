@@ -64,6 +64,8 @@ window reload is not enough).
    - **Generate the game code**: the game's ARM code translated to C (`<app> --generate`);
    - **Compile the game code**: that C compiled into the game's library (`<app> --compile`, reusing what was generated).
 4. **Play** (`--play`); **Start screen** opens the game's own start screen (its settings and controls).
+5. **Report an issue…** on a game's page opens the nxrt GitHub new-issue form with the game, its app and build, the
+   latest manager log (a tail of it) and the environment laid out. Review it, add what happened, submit.
 
 Each run's log is shown live and kept in `~/Library/Application Support/nxrt-frontend/logs/`.
 
@@ -131,10 +133,12 @@ nxrt-frontend --add <package.nsp | app> [--data-root <dir>]   # add a Switch gam
 nxrt-frontend --keys <prod.keys>                               # the keys games are read with
 nxrt-frontend --list                                           # every game and its steps
 nxrt-frontend --step <title id | app id> files|generate|compile|all [src]
+nxrt-frontend --issue <title id | app id>                      # print the prefilled nxrt GitHub issue URL
 nxrt-frontend --create <title id> [--id <id>] [--dir <folder>]  # a new recomp of a game added from its package
 ```
 
-`cargo run --manifest-path src-tauri/Cargo.toml -- --list` works too.
+`cargo run --manifest-path src-tauri/Cargo.toml -- --list` works too. `--issue` prints the URL instead of opening it; a
+game's page has the **Report an issue…** button that opens it.
 
 ### Screenshots and checks
 
@@ -165,6 +169,7 @@ The steps print `{"nxrt_progress":1,...}` lines and one `{"nxrt_setup":1,...}` r
 | `src-tauri/src/api.rs` | the serialisable view of a game, gathered from its app in parallel |
 | `src-tauri/src/pads.rs` | controllers: gilrs → `pad-button` / `pad-dir` / `pad-trigger` / `pad-status` events |
 | `src-tauri/src/controls.rs` | controller defaults + per-game settings, and the `NXRT_CONTROLLER` overlay |
+| `src-tauri/src/issues.rs` | a game's prefilled nxrt GitHub issue (details, log tail, environment) |
 | `src-tauri/src/library.rs` | the library file and its `Entry`s |
 | `src-tauri/src/runner.rs` | running a game or a step, its log and progress |
 | `src-tauri/src/manage.rs` | packages, exefs, RomFS through libnxrt_manage |

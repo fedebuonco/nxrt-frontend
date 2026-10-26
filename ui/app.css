@@ -560,3 +560,7 @@ body.pad-on .page { padding-bottom: 86px; }
   .ctl-grid, .bind-grid { grid-template-columns: 1fr; }
   .ctl-label { flex-basis: 110px; }
 }
+
+/* report an issue */
+.issue-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.issue-row .muted { font-size: 10.5px; }

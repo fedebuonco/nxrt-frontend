@@ -81,6 +81,7 @@
     cpu: svg('<rect x="3.4" y="3.4" width="9.2" height="9.2" rx="1.6" stroke="currentColor" stroke-width="1.4"/><rect x="6.4" y="6.4" width="3.2" height="3.2" rx=".8" fill="currentColor"/>'),
     spark: svg('<path d="M8 1.8l1.4 4.8L14.2 8l-4.8 1.4L8 14.2 6.6 9.4 1.8 8l4.8-1.4z" fill="currentColor"/>', 14),
     screen: svg('<rect x="2.2" y="3.2" width="11.6" height="8" rx="1.4" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 13.4h5.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>', 14),
+    bug: svg('<ellipse cx="8" cy="8.8" rx="3.3" ry="4.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.6V2.9M5.3 6L3.7 4.4M10.7 6l1.6-1.6M4.7 8.8H2.4M13.6 8.8h-2.3M5.4 11.4l-1.7 1.5M10.6 11.4l1.7 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>', 14),
     pad: svg('<path d="M4.5 5.3h7c1.3 0 2.2.9 2.5 2.2l.6 2.6c.3 1.3-.8 2.3-2 1.9l-1.5-.6c-.5-.2-1-.6-1.6-.6H6.5c-.6 0-1 .4-1.6.6l-1.5.6c-1.2.4-2.3-.6-2-1.9l.6-2.6c.3-1.3 1.2-2.2 2.5-2.2z" stroke="currentColor" stroke-width="1.25"/><path d="M5.1 8.2v2.1M4.1 9.25h2.1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="10.8" cy="8.7" r=".8" fill="currentColor"/><circle cx="11.9" cy="10" r=".8" fill="currentColor"/>', 16),
   };
 
@@ -346,6 +347,10 @@
           <div class="actions">${heroActions(g)}</div>
         </div>
       </section>
+      <div class="issue-row">
+        <button class="btn ghost sm" data-act="issue">${ICONS.bug} Report an issue…</button>
+        <span class="muted small">Opens the nxrt GitHub new-issue form with this game, its build and its last log filled in.</span>
+      </div>
       ${
         g.build_mismatch
           ? `<p class="note error" style="margin-top:16px">This package is another version of the game than ${esc(g.app_name)} is for (v${esc((g.describe || {}).game_version || '')}).</p>`
@@ -1132,6 +1137,16 @@
     }
   }
 
+  async function openIssue(g) {
+    if (!g) return;
+    try {
+      await invoke('open_issue', { key: g.key });
+      toast('The nxrt issue form is open in your browser', 'ok');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
   async function resetControls(scope, key) {
     try {
       S.snap = await invoke('save_controls', { scope, key: key || null, controls: {} });
@@ -1195,6 +1210,8 @@
         return invoke('open_logs');
       case 'pad-help':
         return helpSheet();
+      case 'issue':
+        return openIssue(g);
       case 'controls-reset-defaults':
         return resetControls('defaults');
       case 'controls-reset-game':

@@ -112,6 +112,24 @@ pub fn reveal(p: &Path) {
     let _ = std::process::Command::new("explorer").arg(p).spawn();
 }
 
+/// Opens the prefilled new-issue URL (only the nxrt issue form is allowed).
+pub fn open_url(url: &str) -> Result<(), String> {
+    let prefix = format!("{}?", crate::issues::NEW_ISSUE);
+    if !url.starts_with(&prefix) {
+        return Err("Refusing to open an unexpected URL".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(url).spawn().map_err(|e| format!("open: {e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = url;
+        Err("Opening a browser is only wired for macOS here".into())
+    }
+}
+
 /// Shows a file in Finder (selected), or opens a folder.
 pub fn reveal_file(p: &Path) {
     #[cfg(target_os = "macos")]
