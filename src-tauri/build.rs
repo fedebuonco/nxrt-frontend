@@ -35,4 +35,24 @@ fn main() {
         .flag_if_supported("-mmacosx-version-min=11.0")
         .opt_level(2)
         .compile("nxrt_manage");
+
+    // SDL3 (controllers, built from source) uses @available in its Objective-C, which calls
+    // ___isPlatformVersionAtLeast from clang's runtime; Rust links with -nodefaultlibs, so the runtime is named here.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        let dir = std::process::Command::new("xcrun")
+            .args(["clang", "-print-resource-dir"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()).join("lib/darwin"));
+        match dir {
+            Some(d) if d.join("libclang_rt.osx.a").exists() => {
+                println!("cargo:rustc-link-search=native={}", d.display());
+                println!("cargo:rustc-link-lib=static=clang_rt.osx");
+            }
+            _ => println!(
+                "cargo:warning=clang's runtime (libclang_rt.osx.a) not found: SDL3 may not link"
+            ),
+        }
+    }
 }

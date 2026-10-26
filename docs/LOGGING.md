@@ -33,7 +33,7 @@ The file names use the app id from `--describe`; the issue form's **Logs** secti
 `error` < `warn` < `info` < `debug` < `trace`; default `info`.
 
 Targets used by explicit events: `app`, `run`, `api`, `pads`, `ui`, `recomp`, `settings`, `library`, `issues`. Library
-crates (tauri, gilrs) log under their own targets; a global `NXRT_FRONTEND_LOG=debug` shows them too.
+crates (tauri) log under their own targets; a global `NXRT_FRONTEND_LOG=debug` shows them too.
 
 ```sh
 NXRT_FRONTEND_LOG=debug npm run dev

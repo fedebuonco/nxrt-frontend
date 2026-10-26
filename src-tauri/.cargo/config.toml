@@ -1,0 +1,8 @@
+# SDL3 (sdl3-sys, built from source with CMake) is compiled with Apple's clang on the Mac, as the app is linked: a
+# Homebrew LLVM first on PATH emits ___isPlatformVersionAtLeast for SDL's @available checks, which Apple's linker
+# (without that LLVM's compiler-rt) can't resolve.
+[env]
+CC_aarch64_apple_darwin = "/usr/bin/clang"
+CXX_aarch64_apple_darwin = "/usr/bin/clang++"
+CC_x86_64_apple_darwin = "/usr/bin/clang"
+CXX_x86_64_apple_darwin = "/usr/bin/clang++"

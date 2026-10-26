@@ -61,7 +61,7 @@ This stands on a lot of shoulders.
   documentation taught us how these systems work.
 - **The third-party work in nxrt:** Dear ImGui (Omar Cornut), SMAA, xxHash (Yann Collet), the ReShade headers, the
   Baloo 2 font, SDL3, FFmpeg, Clang/LLVM, zig, and the Python capstone/lz4/unicorn tooling.
-- **The window:** Tauri, Vite, the Rust crates (serde, gilrs, tracing, rfd, base64, toml, dirs), Prettier and ESLint.
+- **The window:** Tauri, Vite, the Rust crates (serde, sdl3-sys, tracing, rfd, base64, toml, dirs), Prettier and ESLint.
 - **And everyone who tested, documented, and filed an issue.**
 
 ## Tests

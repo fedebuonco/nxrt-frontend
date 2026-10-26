@@ -27,8 +27,9 @@ Each run's log is shown live and kept in `~/Library/Application Support/nxrt-fro
 
 ## Controller and keyboard
 
-Any standard controller works over USB or Bluetooth — Xbox, DualSense, Switch Pro, 8BitDo — read with `gilrs` in the
-Rust backend while the manager's window has focus. The labels in the window follow the pad you have: Nintendo's bottom
+Any standard controller works over USB or Bluetooth — Xbox, DualSense, Switch Pro, 8BitDo — read with SDL3 (the
+library and drivers the games use, built into the app) in the Rust backend while the manager's window has focus. While
+a game runs, the manager lets go of the controllers: they are the game's. The labels in the window follow the pad you have: Nintendo's bottom
 button is B, Xbox's is A, PlayStation's is ✕.
 
 |                         |                                 |
