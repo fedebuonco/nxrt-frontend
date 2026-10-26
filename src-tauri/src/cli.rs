@@ -63,10 +63,7 @@ fn issue(who: &str) -> i32 {
     };
     let g = api::Gathered::gather(e);
     let v = api::view(index, e, &g, lib.keys.as_deref(), None, None);
-    println!(
-        "{}",
-        issues::for_game(&v, &recomp::default_nxrt(), &library::dir().join("logs"))
-    );
+    println!("{}", issues::for_game(&v, &recomp::default_nxrt()));
     0
 }
 

@@ -611,7 +611,7 @@ pub fn open_issue(state: State<Shared>, key: String) -> Result<(), String> {
     let last = state.last.lock().unwrap().get(&key).cloned();
     let g = api::Gathered::gather(&entry);
     let view = api::view(index, &entry, &g, None, None, last);
-    let url = issues::for_game(&view, &recomp::default_nxrt(), &library::dir().join("logs"));
+    let url = issues::for_game(&view, &recomp::default_nxrt());
     ops::open_url(&url)
 }
 

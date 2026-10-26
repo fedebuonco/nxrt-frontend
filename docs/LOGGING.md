@@ -26,7 +26,8 @@ and structured event fields in the UI.
 | `<app-id>-<time>.log`        | a run's log: the game/step's stdout and stderr                           |
 | `<app-id>-<step>-<time>.log` | a setup step's log                                                       |
 
-The file names use the app id from `--describe`; the issue form's **Logs** section picks the newest one for that app.
+The file names use the app id from `--describe`. The issue form doesn't include a log (logs can name your folders):
+attach the newest one for that app yourself.
 
 ## Levels and targets
 
