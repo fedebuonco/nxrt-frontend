@@ -9,7 +9,26 @@
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <div class="brand"><span class="logo">nx</span><span class="word">nxrt</span></div>
+        <div class="brand">
+          <svg class="logo" viewBox="100 100 824 824" aria-hidden="true">
+            <defs>
+              <clipPath id="logo-l"><rect x="0" y="0" width="512" height="1024" /></clipPath>
+              <clipPath id="logo-ur"><rect x="512" y="0" width="512" height="512" /></clipPath>
+              <clipPath id="logo-lr"><rect x="512" y="512" width="512" height="512" /></clipPath>
+              <path
+                id="logo-x"
+                d="M322 322 L702 702 M322 702 L702 322"
+                stroke-width="112"
+                stroke-linecap="round"
+                fill="none"
+              />
+            </defs>
+            <rect x="100" y="100" width="824" height="824" rx="185" fill="#fff" />
+            <use href="#logo-x" stroke="#111" clip-path="url(#logo-l)" />
+            <use href="#logo-x" stroke="var(--joy-blue)" clip-path="url(#logo-ur)" />
+            <use href="#logo-x" stroke="var(--joy-red)" clip-path="url(#logo-lr)" /></svg
+          ><span class="word">nxrt</span>
+        </div>
         <nav id="nav" class="nav" aria-label="Sections"></nav>
         <div id="update" class="update-slot" hidden></div>
         <div class="side-foot">
