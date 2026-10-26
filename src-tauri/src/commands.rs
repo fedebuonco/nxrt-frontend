@@ -586,6 +586,12 @@ pub fn save_dev(state: State<Shared>, index: usize, dir: String, cmd: String) ->
     Ok(snapshot(&state))
 }
 
+/// The small sidebar support link.
+#[tauri::command]
+pub fn open_donate() -> Result<(), String> {
+    ops::open_donate()
+}
+
 /// The manager's own log tail, for the Logs view (docs/LOGGING.md).
 #[tauri::command]
 pub fn manager_log(lines: Option<usize>) -> logging::ManagerLog {

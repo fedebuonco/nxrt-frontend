@@ -591,3 +591,16 @@ body.pad-on .page { padding-bottom: 86px; }
 .manager-tail .log-line.warn { color: var(--amber); }
 .manager-tail .log-line.debug, .manager-tail .log-line.trace { color: var(--muted); }
 .manager-empty { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; padding: 6px 0; }
+
+/* the very small support link, bottom of the sidebar */
+.donate {
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+  margin: 0 0 1px 2px; padding: 1px 2px; border: 0; background: none;
+  color: var(--muted); font: inherit; font-size: 10px; letter-spacing: .01em;
+  opacity: .58; cursor: pointer;
+}
+.donate:hover { color: var(--sub); opacity: 1; }
+.donate:focus { outline: none; }
+.donate.pad-focus { color: var(--accent); opacity: 1; }
+.donate-heart { font-size: 9px; color: var(--muted); }
+.donate:hover .donate-heart { color: var(--red); }

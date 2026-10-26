@@ -1216,6 +1216,14 @@
     }
   }
 
+  async function openDonate() {
+    try {
+      await invoke('open_donate');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
   async function openIssue(g) {
     if (!g) return;
     try {
@@ -1294,6 +1302,8 @@
         return render();
       case 'go-logs':
         return go('logs');
+      case 'donate':
+        return openDonate();
       case 'pad-help':
         return helpSheet();
       case 'issue':

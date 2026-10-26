@@ -113,12 +113,12 @@ pub fn reveal(p: &Path) {
     let _ = std::process::Command::new("explorer").arg(p).spawn();
 }
 
-/// Opens the prefilled new-issue URL (only the nxrt issue form is allowed).
-pub fn open_url(url: &str) -> Result<(), String> {
-    let prefix = format!("{}?", crate::issues::NEW_ISSUE);
-    if !url.starts_with(&prefix) {
-        return Err("Refusing to open an unexpected URL".into());
-    }
+/// The little support link in the sidebar.
+pub fn open_donate() -> Result<(), String> {
+    open_browser("https://ko-fi.com/fedebuonco")
+}
+
+fn open_browser(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open").arg(url).spawn().map_err(|e| format!("open: {e}"))?;
@@ -129,6 +129,15 @@ pub fn open_url(url: &str) -> Result<(), String> {
         let _ = url;
         Err("Opening a browser is only wired for macOS here".into())
     }
+}
+
+/// Opens the prefilled new-issue URL (only the nxrt issue form is allowed).
+pub fn open_url(url: &str) -> Result<(), String> {
+    let prefix = format!("{}?", crate::issues::NEW_ISSUE);
+    if !url.starts_with(&prefix) {
+        return Err("Refusing to open an unexpected URL".into());
+    }
+    open_browser(url)
 }
 
 /// Shows a file in Finder (selected), or opens a folder.

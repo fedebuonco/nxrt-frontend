@@ -73,6 +73,7 @@ fn main() {
             commands::save_controls,
             commands::open_issue,
             commands::manager_log,
+            commands::open_donate,
             commands::log_ui,
         ])
         .run(tauri::generate_context!())
