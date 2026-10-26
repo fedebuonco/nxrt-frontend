@@ -14,25 +14,40 @@ pub fn keys_for(chosen: Option<&Path>, package: &Path) -> Option<PathBuf> {
         .or_else(|| manage::find_keys(package))
 }
 
-/// The package's game into the list: its control data read, its icon kept, the app in the list that runs it (same
-/// title id) given it. Returns the game's index.
-pub fn add_package_to(
-    games: &mut Vec<Entry>,
-    package: &Path,
-    keys: &Path,
-) -> Result<usize, String> {
-    let p =
+/// What adding a package needs to know, read without the library locked (seconds: the package's control data, and
+/// each app in the library asked which game it runs).
+pub struct PackageRead {
+    pub info: manage::Package,
+    /// (app, the title id it runs) for the library's apps that have no package yet
+    pub apps: Vec<(PathBuf, String)>,
+}
+
+pub fn read_package(games: &[Entry], package: &Path, keys: &Path) -> Result<PackageRead, String> {
+    let info =
         manage::package_info(package, keys).map_err(|e| format!("{}: {e}", package.display()))?;
-    if let Some(icon) = &p.icon {
-        let path = library::icon_path(&p.title_id);
+    if let Some(icon) = &info.icon {
+        let path = library::icon_path(&info.title_id);
         let _ = std::fs::create_dir_all(path.parent().unwrap());
         let _ = std::fs::write(&path, icon);
     }
+    let apps = games
+        .iter()
+        .filter(|g| g.package.is_none())
+        .filter_map(|g| g.exe.clone())
+        .filter_map(|e| runner::describe(&e).ok().map(|d| (e, d.title_id)))
+        .collect();
+    Ok(PackageRead { info, apps })
+}
+
+/// The package's game into the list (the list as it is now): an update and its base game pair up by title id, a game
+/// joins the app that runs it, else it is a new entry. Returns its index. No I/O: the reading is read_package's.
+pub fn merge_package(games: &mut Vec<Entry>, package: &Path, keys: &Path, r: PackageRead) -> usize {
+    let p = r.info;
     if let Some(i) = games
         .iter()
         .position(|g| g.package.as_deref() == Some(package) || g.update.as_deref() == Some(package))
     {
-        return Ok(i); // (already here)
+        return i; // (already here)
     }
     // base game and update pair up (the same title; an update's id differs in its low bits)
     let base_tid = |t: &str| u64::from_str_radix(t, 16).map(|v| v & !0xFFF).unwrap_or(0);
@@ -58,13 +73,15 @@ pub fn add_package_to(
                 e.name = p.name;
             }
         }
-        return Ok(i);
+        return i;
     }
     // the game's app: an entry whose app runs this title (and has no package yet)
     let app = games.iter().position(|g| {
         g.package.is_none()
             && g.exe.as_ref().is_some_and(|e| {
-                runner::describe(e).is_ok_and(|d| d.title_id.eq_ignore_ascii_case(&p.title_id))
+                r.apps
+                    .iter()
+                    .any(|(x, t)| x == e && t.eq_ignore_ascii_case(&p.title_id))
             })
     });
     let i = match app {
@@ -86,7 +103,17 @@ pub fn add_package_to(
     e.publisher = p.publisher;
     e.version = p.version;
     e.build_id = p.build_id.unwrap_or_default();
-    Ok(i)
+    i
+}
+
+/// The package's game into the list: read, then merged. Returns the game's index.
+pub fn add_package_to(
+    games: &mut Vec<Entry>,
+    package: &Path,
+    keys: &Path,
+) -> Result<usize, String> {
+    let r = read_package(games, package, keys)?;
+    Ok(merge_package(games, package, keys, r))
 }
 
 /// A new recomp for a game added from its package (recomp.rs): its game files set up from the package into

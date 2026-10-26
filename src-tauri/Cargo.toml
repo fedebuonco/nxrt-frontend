@@ -28,6 +28,7 @@ rfd = "0.15"
 base64 = "0.22"
 sdl3-sys = { version = "0.7", features = ["build-from-source-static"] }  # (controllers: SDL's own drivers, as the games)
 tracing = "0.1"
+libc = "0.2"  # (a run's process group: Stop signals it all)
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-appender = "0.2"
 

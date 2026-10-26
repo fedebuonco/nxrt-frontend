@@ -1316,6 +1316,11 @@ import { ICONS } from './js/icons.js';
     try {
       const snap = await invoke('snapshot_command');
       S.snap = snap;
+      // (the backend's own warning - an unreadable library kept aside, a library ABI mismatch - once each)
+      if (snap.message && snap.message !== S.shownMessage) {
+        S.shownMessage = snap.message;
+        toast(snap.message, 'error');
+      }
       if (S.view === 'game' && !snap.games.some((g) => g.key === S.key)) {
         S.view = 'library';
         S.key = null;
@@ -1424,7 +1429,7 @@ import { ICONS } from './js/icons.js';
     const g = game();
     if (!g) return;
     try {
-      S.snap = await invoke('remove', { index: g.index });
+      S.snap = await invoke('remove', { key: g.key });
       S.view = 'library';
       S.key = null;
       render();
@@ -1527,7 +1532,7 @@ import { ICONS } from './js/icons.js';
     if (!path) return;
     const done = toast('Checking the app…', 'busy');
     try {
-      S.snap = await invoke('choose_app', { index: g.index, path });
+      S.snap = await invoke('choose_app', { key: g.key, path });
       render();
       toast('App added', 'ok');
     } catch (e) {
@@ -1543,7 +1548,7 @@ import { ICONS } from './js/icons.js';
     const dir = (document.getElementById(`dev-dir-${g.key}`) || {}).value || '';
     const cmd = (document.getElementById(`dev-cmd-${g.key}`) || {}).value || '';
     try {
-      S.snap = await invoke('save_dev', { index: g.index, dir, cmd });
+      S.snap = await invoke('save_dev', { key: g.key, dir, cmd });
       render();
       toast('Dev build saved', 'ok');
     } catch (e) {
@@ -1581,7 +1586,7 @@ import { ICONS } from './js/icons.js';
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Preparing…';
     try {
-      await invoke('create_recomp', { index: g.index, id, dir });
+      await invoke('create_recomp', { key: g.key, id, dir });
       closeSheet();
       toast('Building the recomp’s app…', 'busy');
       queueLoad();

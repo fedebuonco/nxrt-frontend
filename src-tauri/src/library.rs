@@ -64,6 +64,9 @@ pub struct Library {
     pub controls: Controls,
     #[serde(default, rename = "game")]
     pub games: Vec<Entry>,
+    /// (not saved) the library file could not be read: where it was moved, so nothing overwrites it
+    #[serde(skip)]
+    pub load_error: Option<String>,
 }
 
 /// A keys file that looks like one (prod.keys: has the header key). Err: why not.
@@ -99,20 +102,58 @@ fn path() -> PathBuf {
 }
 
 impl Library {
+    /// The library. A file that is there but can't be read is moved aside (library.toml.broken-<time>) before an
+    /// empty library starts, so the next save can't overwrite it; load_error says where it went.
     pub fn load() -> Library {
-        std::fs::read_to_string(path())
-            .ok()
-            .and_then(|s| toml::from_str(&s).ok())
-            .unwrap_or_default()
+        let p = path();
+        let text = match std::fs::read_to_string(&p) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Library::default(),
+            Err(e) => return Library::broken(&p, &e.to_string()),
+        };
+        match toml::from_str(&text) {
+            Ok(lib) => lib,
+            Err(e) => Library::broken(&p, &e.to_string()),
+        }
     }
 
+    fn broken(p: &Path, why: &str) -> Library {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let aside = p.with_file_name(format!(
+            "{}.broken-{stamp}",
+            p.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "library.toml".into())
+        ));
+        let moved = std::fs::rename(p, &aside).is_ok();
+        tracing::error!(target: "library", path = %p.display(), error = %why, moved_to = %aside.display(), moved,
+            "the library could not be read");
+        Library {
+            load_error: Some(if moved {
+                format!(
+                    "The library could not be read ({why}); it was kept as {}",
+                    aside.display()
+                )
+            } else {
+                format!("The library could not be read ({why})")
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// Written to a temporary file and renamed over the library, so a save cut short leaves the old one whole.
     pub fn save(&self) -> Result<(), String> {
         let p = path();
         if let Some(d) = p.parent() {
             std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
         }
         let text = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(&p, text).map_err(|e| format!("{}: {e}", p.display()))
+        let tmp = p.with_extension("toml.tmp");
+        std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        std::fs::rename(&tmp, &p).map_err(|e| format!("{}: {e}", p.display()))
     }
 
     pub fn add_app(&mut self, exe: &Path, data_root: Option<PathBuf>) -> bool {
@@ -153,6 +194,7 @@ mod tests {
                 controls: game_controls.clone(),
                 ..Default::default()
             }],
+            ..Default::default()
         };
         let text = toml::to_string_pretty(&lib).unwrap();
         assert!(text.contains("[controls]"), "{text}");

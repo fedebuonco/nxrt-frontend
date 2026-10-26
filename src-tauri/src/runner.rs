@@ -55,6 +55,9 @@ fn command(exe: &Path, data_root: Option<&Path>) -> Command {
     c
 }
 
+/// How long --describe / --status may take: they answer in well under a second.
+const QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// One JSON object from the runner's stdout (it logs to stderr).
 fn query<T: for<'de> Deserialize<'de>>(
     exe: &Path,
@@ -62,12 +65,50 @@ fn query<T: for<'de> Deserialize<'de>>(
     flag: &str,
     key: &str,
 ) -> Result<T, String> {
-    let out = command(exe, data_root)
-        .arg(flag)
+    let mut c = command(exe, data_root);
+    c.arg(flag)
         .stdin(Stdio::null())
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        c.process_group(0);
+    }
+    let mut child = c
+        .spawn()
         .map_err(|e| format!("can't run {}: {e}", exe.display()))?;
-    let text = String::from_utf8_lossy(&out.stdout);
+    // (stdout read off this thread, so a query that never ends can be given up on: a wrong app picked, a hung one)
+    let mut out = child.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut v = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut out, &mut v);
+        v
+    });
+    let deadline = std::time::Instant::now() + QUERY_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(15))
+            }
+            _ => {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL)
+                };
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "{} doesn't answer {flag} within {} s (not an nxrt app?)",
+                    exe.display(),
+                    QUERY_TIMEOUT.as_secs()
+                ));
+            }
+        }
+    }
+    let stdout = reader.join().unwrap_or_default();
+    let text = String::from_utf8_lossy(&stdout);
     let line = text.lines().find(|l| l.contains(key)).ok_or_else(|| {
         format!(
             "{} doesn't answer {flag} (an nxrt app from before the manager?)",
@@ -77,12 +118,61 @@ fn query<T: for<'de> Deserialize<'de>>(
     serde_json::from_str(line).map_err(|e| format!("{flag}: {e}"))
 }
 
+// The answers are kept: a snapshot asks every app in the library, and each answer is a process start. An app's
+// --describe stands while its binary does (its path and mtime); --status also stands until a run of the manager's
+// ends (forget) or STATUS_FOR has passed (a setup done outside the manager).
+type Answer<T> = (std::time::Instant, Result<T, String>);
+type Answers<T> = Mutex<
+    std::collections::HashMap<(PathBuf, Option<PathBuf>, Option<std::time::SystemTime>), Answer<T>>,
+>;
+static DESCRIBED: std::sync::LazyLock<Answers<Describe>> =
+    std::sync::LazyLock::new(Default::default);
+static STATUSES: std::sync::LazyLock<Answers<Status>> = std::sync::LazyLock::new(Default::default);
+const STATUS_FOR: std::time::Duration = std::time::Duration::from_secs(5);
+
+fn kept<T: Clone>(
+    answers: &Answers<T>,
+    exe: &Path,
+    data_root: Option<&Path>,
+    keep: Option<std::time::Duration>,
+    ask: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let mtime = std::fs::metadata(exe).and_then(|m| m.modified()).ok();
+    let k = (exe.to_path_buf(), data_root.map(Path::to_path_buf), mtime);
+    if let Some((at, r)) = answers.lock().unwrap().get(&k) {
+        // (a failed answer, a timeout say, is asked again soon)
+        let keep = if r.is_err() {
+            Some(keep.unwrap_or(STATUS_FOR))
+        } else {
+            keep
+        };
+        if keep.is_none_or(|d| at.elapsed() < d) {
+            return r.clone();
+        }
+    }
+    let r = ask();
+    answers
+        .lock()
+        .unwrap()
+        .insert(k, (std::time::Instant::now(), r.clone()));
+    r
+}
+
 pub fn describe(exe: &Path) -> Result<Describe, String> {
-    query(exe, None, "--describe", "\"nxrt_describe\"")
+    kept(&DESCRIBED, exe, None, None, || {
+        query(exe, None, "--describe", "\"nxrt_describe\"")
+    })
 }
 
 pub fn status(exe: &Path, data_root: Option<&Path>) -> Result<Status, String> {
-    query(exe, data_root, "--status", "\"nxrt_status\"")
+    kept(&STATUSES, exe, data_root, Some(STATUS_FOR), || {
+        query(exe, data_root, "--status", "\"nxrt_status\"")
+    })
+}
+
+/// The kept --status answers dropped: a run ended, its files or game code may stand otherwise now.
+pub fn forget() {
+    STATUSES.lock().unwrap().clear();
 }
 
 /// The log of a run: its last lines, kept while the manager reads them.
@@ -161,6 +251,8 @@ pub struct Run {
     pub log_file: Option<PathBuf>,
     /// the manager's id for this run; nxrt gets the same id as NXRT_RUN_ID
     pub run_id: String,
+    /// the user stopped it (Stop / Cancel): its end is "stopped", not a crash
+    pub stopped: bool,
 }
 
 impl Run {
@@ -258,6 +350,12 @@ impl Run {
                 c.current_dir(dir);
             }
         }
+        // (its own process group: Stop reaches what it starts too - make and the compilers, the generator)
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            c.process_group(0);
+        }
         let mut child = c
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -282,7 +380,20 @@ impl Run {
             let (log, file, repaint, progress) =
                 (log.clone(), file.clone(), repaint.clone(), progress.clone());
             std::thread::spawn(move || {
-                for line in BufReader::new(s).lines().map_while(Result::ok) {
+                // (bytes, not lines of UTF-8: one line that is not valid UTF-8 must not stop the reading - the
+                // pipe would fill and the game block on its next write)
+                let mut r = BufReader::new(s);
+                let mut buf = Vec::new();
+                loop {
+                    buf.clear();
+                    match r.read_until(b'\n', &mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                    while buf.last().is_some_and(|b| *b == b'\n' || *b == b'\r') {
+                        buf.pop();
+                    }
+                    let line = String::from_utf8_lossy(&buf).into_owned();
                     if let Some(f) = &file {
                         use std::io::Write;
                         let _ = writeln!(f.lock().unwrap(), "{line}");
@@ -319,22 +430,44 @@ impl Run {
             progress,
             log_file,
             run_id,
+            stopped: false,
         })
     }
 
-    /// None while it runs, else how it ended.
+    /// None while it runs, else how it ended ("stopped" when the user stopped it).
     pub fn exited(&mut self) -> Option<String> {
         match self.child.try_wait() {
             Ok(None) => None,
+            Ok(Some(_)) if self.stopped => Some(STOPPED.into()),
             Ok(Some(st)) => Some(exit_text(st)),
             Err(e) => Some(format!("lost track of it: {e}")),
         }
     }
 
+    /// Stop / Cancel: the run's whole process group asked to end (SIGTERM), then made to (SIGKILL) if it is still
+    /// there after a moment.
     pub fn stop(&mut self) {
+        if self.stopped {
+            return;
+        }
+        self.stopped = true;
+        #[cfg(unix)]
+        {
+            let pgid = self.child.id() as libc::pid_t;
+            unsafe { libc::kill(-pgid, libc::SIGTERM) };
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                // (the group may be gone by now: a no-op then)
+                unsafe { libc::kill(-pgid, libc::SIGKILL) };
+            });
+        }
+        #[cfg(not(unix))]
         let _ = self.child.kill();
     }
 }
+
+/// How a run the user stopped ended.
+pub const STOPPED: &str = "stopped";
 
 fn exit_text(st: std::process::ExitStatus) -> String {
     if st.success() {

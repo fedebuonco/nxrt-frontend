@@ -69,8 +69,9 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
         nxrt_dir: recomp::default_nxrt().display().to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
         running: runs.len(),
-        message: (!manage::abi_ok())
-            .then(|| "libnxrt_manage: another ABI than this app's".to_string()),
+        message: lib.load_error.clone().or_else(|| {
+            (!manage::abi_ok()).then(|| "libnxrt_manage: another ABI than this app's".to_string())
+        }),
         controls: lib.controls.clone(),
     };
     tracing::debug!(target: "api", games = snap.games.len(), ms = t0.elapsed().as_millis(), "snapshot");
@@ -125,20 +126,46 @@ fn log_file(id: &str, what: &str) -> Option<PathBuf> {
 
 // ---- runs --------------------------------------------------------------------------------------------------------
 
+/// Something of this game runs already: a second start is refused before anything is spawned.
+fn not_running(sh: &Shared, key: &str) -> Result<(), String> {
+    if sh.runs.lock().unwrap().contains_key(key) {
+        return Err("That game is already running".into());
+    }
+    Ok(())
+}
+
+/// The library entry with this key (the window names games by key: indexes move when the library changes).
+fn entry_index(lib: &library::Library, key: &str) -> Result<usize, String> {
+    lib.games
+        .iter()
+        .position(|e| api::game_key(e) == key)
+        .ok_or_else(|| "No such game".to_string())
+}
+
 fn start(
     sh: &Shared,
     app: &AppHandle,
     key: &str,
-    run: runner::Run,
+    mut run: runner::Run,
     code_id: String,
 ) -> Result<(), String> {
     let kind = run.kind;
+    {
+        let runs = sh.runs.lock().unwrap();
+        if runs.contains_key(key) {
+            // (a start that raced another: its process must not be left running unwatched)
+            drop(runs);
+            run.stop();
+            return Err("That game is already running".into());
+        }
+    }
     let handle = RunHandle {
         run: Arc::new(Mutex::new(run)),
     };
     {
         let mut runs = sh.runs.lock().unwrap();
         if runs.contains_key(key) {
+            handle.run.lock().unwrap().stop();
             return Err("That game is already running".into());
         }
         runs.insert(key.to_string(), handle.clone());
@@ -221,6 +248,7 @@ fn finish(
     handle: &RunHandle,
     how: String,
 ) -> ExitInfo {
+    runner::forget();
     let result = handle
         .run
         .lock()
@@ -239,7 +267,11 @@ fn finish(
     {
         let mut lib = sh.library.lock().unwrap();
         if let Some(e) = lib.games.iter_mut().find(|e| api::game_key(e) == key) {
+            let stopped = how == runner::STOPPED;
             let (text, ok) = match (kind, result) {
+                // (the user stopped it: not a failure)
+                (Kind::Game, _) if stopped => ("Stopped".into(), true),
+                (_, _) if stopped => ("Cancelled".into(), true),
                 (Kind::Setup(stage), Some(res)) if res.ok => {
                     if stage == Stage::Generate && !code_id.is_empty() {
                         e.generated_for = code_id;
@@ -397,10 +429,12 @@ pub async fn add_package(state: State<'_, Shared>, path: String) -> Result<Snaps
     )?;
     let sh2 = sh.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut games = sh2.library.lock().unwrap().games.clone();
-        ops::add_package_to(&mut games, &pkg, &keys)?;
+        // (read without the library locked, then merged into the library as it is by then: a run finishing or
+        // another game added meanwhile keeps its changes)
+        let games = sh2.library.lock().unwrap().games.clone();
+        let read = ops::read_package(&games, &pkg, &keys)?;
         let mut lib = sh2.library.lock().unwrap();
-        lib.games = games;
+        ops::merge_package(&mut lib.games, &pkg, &keys, read);
         lib.save()
     })
     .await
@@ -451,7 +485,7 @@ pub async fn add_app(
 #[tauri::command]
 pub async fn choose_app(
     state: State<'_, Shared>,
-    index: usize,
+    key: String,
     path: String,
 ) -> Result<Snapshot, String> {
     let sh = state.inner().clone();
@@ -459,9 +493,8 @@ pub async fn choose_app(
     let d = runner::describe(&exe)?;
     {
         let mut lib = sh.library.lock().unwrap();
-        let Some(g) = lib.games.get(index) else {
-            return Err("No such game".into());
-        };
+        let index = entry_index(&lib, &key)?;
+        let g = &lib.games[index];
         if !g.title_id.is_empty() && !d.title_id.eq_ignore_ascii_case(&g.title_id) {
             return Err(format!("{} is for {}, not this game", d.title, d.game_name));
         }
@@ -485,15 +518,12 @@ pub async fn choose_app(
 }
 
 #[tauri::command]
-pub async fn remove(state: State<'_, Shared>, index: usize) -> Result<Snapshot, String> {
+pub async fn remove(state: State<'_, Shared>, key: String) -> Result<Snapshot, String> {
     let sh = state.inner().clone();
-    tracing::info!(target: "library", index, "removing a game from the library");
+    tracing::info!(target: "library", key = %key, "removing a game from the library");
     {
         let mut lib = sh.library.lock().unwrap();
-        if index >= lib.games.len() {
-            return Err("No such game".into());
-        }
-        let key = api::game_key(&lib.games[index]);
+        let index = entry_index(&lib, &key)?;
         if let Some(h) = sh.runs.lock().unwrap().get(&key) {
             h.run.lock().unwrap().stop();
         }
@@ -540,6 +570,7 @@ pub fn start_game(
         (e, lib.controls.clone())
     };
     let exe = entry.exe.clone().ok_or("This game has no nxrt app yet")?;
+    not_running(&state, &key)?;
     // (the game's own controls over the library's defaults; only what is set is passed)
     let effective = library_controls.merged(&entry.controls);
     let overlay = if effective.is_empty() {
@@ -639,6 +670,7 @@ pub fn start_step(
         (e, k)
     };
     let exe = entry.exe.clone().ok_or("This game has no nxrt app yet")?;
+    not_running(&state, &key)?;
     let stage = match stage.as_str() {
         "files" => Stage::Files,
         "generate" => Stage::Generate,
@@ -691,6 +723,7 @@ pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<()
         (Some(d), Some(c)) => (d.clone(), c.clone()),
         _ => return Err("No Dev build command set".into()),
     };
+    not_running(&state, &key)?;
     let run = runner::Run::dev_build(&cmd, &dir, log_file("dev", "-build"), || {})?;
     start(&state, &app, &key, run, String::new())
 }
@@ -706,15 +739,16 @@ pub fn stop(state: State<Shared>, key: String) {
 pub async fn create_recomp(
     state: State<'_, Shared>,
     app: AppHandle,
-    index: usize,
+    key: String,
     id: String,
     dir: String,
 ) -> Result<(), String> {
     tracing::info!(target: "recomp", id = %id, dir = %dir, "creating a recomp");
     let sh = state.inner().clone();
+    not_running(&sh, &key)?;
     let (entry, keys) = {
         let lib = sh.library.lock().unwrap();
-        let e = lib.games.get(index).cloned().ok_or("No such game")?;
+        let e = lib.games[entry_index(&lib, &key)?].clone();
         let k = lib
             .keys
             .clone()
@@ -753,15 +787,14 @@ pub async fn create_recomp(
 #[tauri::command]
 pub fn save_dev(
     state: State<Shared>,
-    index: usize,
+    key: String,
     dir: String,
     cmd: String,
 ) -> Result<Snapshot, String> {
     {
         let mut lib = state.library.lock().unwrap();
-        let Some(g) = lib.games.get_mut(index) else {
-            return Err("No such game".into());
-        };
+        let index = entry_index(&lib, &key)?;
+        let g = &mut lib.games[index];
         let d = dir.trim();
         let c = cmd.trim();
         g.build_dir = (!d.is_empty()).then(|| PathBuf::from(d));
