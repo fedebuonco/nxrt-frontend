@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- nxrt-frontend: a black X; its upper-right arm Joy-Con neon blue, its lower-right arm neon red -->
+  <defs>
+    <clipPath id="left"><rect x="0" y="0" width="512" height="1024"/></clipPath>
+    <clipPath id="upper-right"><rect x="512" y="0" width="512" height="512"/></clipPath>
+    <clipPath id="lower-right"><rect x="512" y="512" width="512" height="512"/></clipPath>
+    <path id="x" d="M322 322 L702 702 M322 702 L702 322" stroke-width="112" stroke-linecap="round" fill="none"/>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#FFFFFF"/>
+  <use href="#x" stroke="#111111" clip-path="url(#left)"/>
+  <use href="#x" stroke="#0AB9E6" clip-path="url(#upper-right)"/>
+  <use href="#x" stroke="#FF3C28" clip-path="url(#lower-right)"/>
+</svg>
