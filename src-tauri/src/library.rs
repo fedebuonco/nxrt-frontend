@@ -111,8 +111,16 @@ impl Library {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Library::default(),
             Err(e) => return Library::broken(&p, &e.to_string()),
         };
-        match toml::from_str(&text) {
-            Ok(lib) => lib,
+        match toml::from_str::<Library>(&text) {
+            Ok(mut lib) => {
+                // (a game added from its update first was once known by the update's id)
+                for g in &mut lib.games {
+                    if !g.title_id.is_empty() {
+                        g.title_id = crate::ops::base_title_id(&g.title_id);
+                    }
+                }
+                lib
+            }
             Err(e) => Library::broken(&p, &e.to_string()),
         }
     }
@@ -213,5 +221,51 @@ mod tests {
         let lib: Library = toml::from_str("[[game]]\nexe = \"/tmp/x\"\n").unwrap();
         assert!(lib.controls.is_empty());
         assert!(lib.games[0].controls.is_empty());
+    }
+
+    #[test]
+    fn a_broken_library_is_set_aside_and_saves_are_whole() {
+        // (the only test that points the library elsewhere: NXRT_FRONTEND_LIBRARY is the process's)
+        let d = std::env::temp_dir().join(format!("nxrt-library-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("library.toml");
+        unsafe { std::env::set_var("NXRT_FRONTEND_LIBRARY", &p) };
+
+        // none yet: an empty library, no error
+        let lib = Library::load();
+        assert!(lib.games.is_empty() && lib.load_error.is_none());
+
+        // saved and read back; no temporary file left
+        let mut lib = Library::default();
+        lib.add_app(Path::new("/apps/demo"), None);
+        lib.save().unwrap();
+        assert_eq!(Library::load().games.len(), 1);
+        assert!(!d.join("library.toml.tmp").exists());
+
+        // a file that doesn't parse: kept aside, reported, and the next save doesn't touch it
+        std::fs::write(&p, "[[game]\nnot toml").unwrap();
+        let lib = Library::load();
+        assert!(lib.games.is_empty());
+        let why = lib.load_error.clone().unwrap();
+        assert!(why.contains("kept as"), "{why}");
+        assert!(!p.exists());
+        let aside: Vec<_> = std::fs::read_dir(&d)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("library.toml.broken-")
+            })
+            .collect();
+        assert_eq!(aside.len(), 1);
+        lib.save().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(aside[0].path()).unwrap(),
+            "[[game]\nnot toml"
+        );
+        unsafe { std::env::remove_var("NXRT_FRONTEND_LIBRARY") };
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

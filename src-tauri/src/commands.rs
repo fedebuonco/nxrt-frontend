@@ -466,7 +466,7 @@ pub async fn add_app(
         if let Some(g) = lib
             .games
             .iter_mut()
-            .find(|g| g.exe.is_none() && g.title_id.eq_ignore_ascii_case(&d.title_id))
+            .find(|g| g.exe.is_none() && ops::same_game(&g.title_id, &d.title_id))
         {
             g.exe = Some(exe);
             g.data_root = dr;
@@ -495,7 +495,7 @@ pub async fn choose_app(
         let mut lib = sh.library.lock().unwrap();
         let index = entry_index(&lib, &key)?;
         let g = &lib.games[index];
-        if !g.title_id.is_empty() && !d.title_id.eq_ignore_ascii_case(&g.title_id) {
+        if !g.title_id.is_empty() && !ops::same_game(&d.title_id, &g.title_id) {
             return Err(format!("{} is for {}, not this game", d.title, d.game_name));
         }
         // (an entry for that app alone gives way to this one, its data folder kept)

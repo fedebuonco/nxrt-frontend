@@ -248,7 +248,7 @@ fn add(args: &[String], i: usize) -> i32 {
                 if let Some(g) = lib
                     .games
                     .iter_mut()
-                    .find(|g| g.exe.is_none() && g.title_id.eq_ignore_ascii_case(&d.title_id))
+                    .find(|g| g.exe.is_none() && ops::same_game(&g.title_id, &d.title_id))
                 {
                     g.exe = Some(exe);
                     g.data_root = dr;

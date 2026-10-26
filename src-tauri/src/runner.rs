@@ -56,7 +56,10 @@ fn command(exe: &Path, data_root: Option<&Path>) -> Command {
 }
 
 /// How long --describe / --status may take: they answer in well under a second.
+#[cfg(not(test))]
 const QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+#[cfg(test)] // (macOS scans a new executable on its first start: a test's scripts can take a second)
+const QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// One JSON object from the runner's stdout (it logs to stderr).
 fn query<T: for<'de> Deserialize<'de>>(
@@ -490,4 +493,265 @@ fn exit_text(st: std::process::ExitStatus) -> String {
         }
     }
     format!("exited with code {}", st.code().unwrap_or(-1))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+
+    /// A fresh folder for one test.
+    fn scratch(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("nxrt-runner-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// A fake runner: a shell script.
+    fn app(dir: &Path, body: &str) -> PathBuf {
+        let p = dir.join("app");
+        std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p
+    }
+
+    fn wait_exit(run: &mut Run) -> String {
+        let t0 = Instant::now();
+        loop {
+            if let Some(how) = run.exited() {
+                return how;
+            }
+            assert!(
+                t0.elapsed() < Duration::from_secs(10),
+                "the run never ended"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// The readers may still be draining the pipes when the process has ended.
+    fn wait_for(what: impl Fn() -> bool) {
+        let t0 = Instant::now();
+        while !what() {
+            assert!(t0.elapsed() < Duration::from_secs(5), "timed out");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    const DESCRIBE: &str = r#"{"nxrt_describe":1,"id":"demo","exe":"demo","title":"Demo","game_name":"Demo Game","game_version":"1.0","title_id":"0100000000010000","build_id":"00aa"}"#;
+
+    #[test]
+    fn describe_finds_its_line_among_the_noise_and_is_kept() {
+        let d = scratch("describe");
+        let count = d.join("count");
+        let exe = app(
+            &d,
+            &format!(
+                "echo x >> '{}'\necho 'starting up'\necho '{DESCRIBE}'\necho 'bye' >&2",
+                count.display()
+            ),
+        );
+        let a = describe(&exe).unwrap();
+        assert_eq!(a.id, "demo");
+        assert_eq!(a.title_id, "0100000000010000");
+        let b = describe(&exe).unwrap();
+        assert_eq!(b.game_name, "Demo Game");
+        assert_eq!(
+            std::fs::read_to_string(&count).unwrap().lines().count(),
+            1,
+            "asked once"
+        );
+    }
+
+    #[test]
+    fn a_changed_app_is_asked_again() {
+        let d = scratch("changed");
+        let exe = app(&d, &format!("echo '{DESCRIBE}'"));
+        assert_eq!(describe(&exe).unwrap().id, "demo");
+        std::thread::sleep(Duration::from_millis(1100)); // (mtime granularity)
+        app(
+            &d,
+            &format!("echo '{}'", DESCRIBE.replace("\"demo\"", "\"other\"")),
+        );
+        assert_eq!(describe(&exe).unwrap().id, "other");
+    }
+
+    #[test]
+    fn an_app_that_does_not_answer_is_an_error() {
+        let d = scratch("silent");
+        let exe = app(&d, "echo hello");
+        let e = describe(&exe).unwrap_err();
+        assert!(e.contains("doesn't answer --describe"), "{e}");
+    }
+
+    #[test]
+    fn a_hung_app_times_out_and_is_killed() {
+        let d = scratch("hung");
+        let pid = d.join("pid");
+        let exe = app(
+            &d,
+            &format!("sleep 30 & echo $! > '{}'\nwait", pid.display()),
+        );
+        let t0 = Instant::now();
+        let e = status(&exe, None).unwrap_err();
+        assert!(e.contains("within"), "{e}");
+        assert!(t0.elapsed() < Duration::from_secs(8), "{:?}", t0.elapsed());
+        // its child went with it (the whole group)
+        let pid: i32 = std::fs::read_to_string(&pid)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        wait_for(|| unsafe { libc::kill(pid, 0) } != 0);
+    }
+
+    #[test]
+    fn status_is_forgotten_after_a_run() {
+        let d = scratch("status");
+        let count = d.join("count");
+        let line = r#"{"nxrt_status":1,"data_root":"/d","game_dir":"/d/g","files":"","status":"","code_id":"abc","files_ready":true,"code_ready":false,"ready":false,"builder":true}"#;
+        let exe = app(
+            &d,
+            &format!("echo x >> '{}'\necho '{line}'", count.display()),
+        );
+        let root = d.join("data");
+        assert!(status(&exe, Some(&root)).unwrap().files_ready);
+        status(&exe, Some(&root)).unwrap();
+        assert_eq!(std::fs::read_to_string(&count).unwrap().lines().count(), 1);
+        forget();
+        assert_eq!(status(&exe, Some(&root)).unwrap().code_id, "abc");
+        assert_eq!(std::fs::read_to_string(&count).unwrap().lines().count(), 2);
+    }
+
+    #[test]
+    fn setup_reads_progress_and_result_and_survives_bad_utf8() {
+        let d = scratch("setup");
+        let exe = app(
+            &d,
+            r#"echo '{"nxrt_progress":1,"fraction":0.5,"step":"Reading"}'
+printf 'bad \377\376 bytes\n' >&2
+echo 'after the bad line'
+echo '{"nxrt_setup":1,"ok":true,"builder":true,"step":"done","hint":"","status":"ready"}'
+echo "args: $*""#,
+        );
+        let log_file = d.join("run.log");
+        let mut run = Run::setup(
+            &exe,
+            None,
+            Stage::Files,
+            "/games/x.nsp",
+            None,
+            None,
+            Some(log_file.clone()),
+            || {},
+        )
+        .unwrap();
+        assert_eq!(wait_exit(&mut run), "closed");
+        wait_for(|| {
+            run.log
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|l| l.starts_with("args:"))
+        });
+        wait_for(|| {
+            run.log
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|l| l == "after the bad line")
+        });
+        let log: Vec<String> = run.log.lock().unwrap().iter().cloned().collect();
+        assert!(
+            log.iter()
+                .any(|l| l.starts_with("bad ") && l.contains('\u{FFFD}')),
+            "{log:?}"
+        );
+        assert!(
+            log.contains(&"args: --setup-files /games/x.nsp".to_string()),
+            "{log:?}"
+        );
+        assert!(
+            !log.iter().any(|l| l.contains("nxrt_progress")),
+            "progress is not log"
+        );
+        let p = run.progress.lock().unwrap().clone();
+        assert_eq!(p.fraction, Some(0.5));
+        assert_eq!(p.step, "Reading");
+        assert!(p.result.unwrap().ok);
+        wait_for(|| {
+            std::fs::read_to_string(&log_file).is_ok_and(|t| t.contains("after the bad line"))
+        });
+    }
+
+    #[test]
+    fn a_game_gets_its_environment() {
+        let d = scratch("env");
+        let exe = app(
+            &d,
+            r#"echo "root=$NXRT_DATA_ROOT pad=$NXRT_CONTROLLER run=$NXRT_RUN_ID $*""#,
+        );
+        let mut run = Run::game(
+            &exe,
+            Some(Path::new("/data/root")),
+            true,
+            None,
+            || {},
+            Some(Path::new("/pad.conf")),
+        )
+        .unwrap();
+        assert_eq!(wait_exit(&mut run), "closed");
+        let want = format!("root=/data/root pad=/pad.conf run={} --play", run.run_id);
+        wait_for(|| run.log.lock().unwrap().iter().any(|l| *l == want));
+    }
+
+    #[test]
+    fn create_steps_are_progress_not_log() {
+        let d = scratch("create");
+        std::fs::write(
+            d.join("build.sh"),
+            "echo '::step Building the app'\necho 'cc main.c'\n",
+        )
+        .unwrap();
+        let mut run = Run::create(&d, None, || {}).unwrap();
+        assert_eq!(wait_exit(&mut run), "closed");
+        wait_for(|| run.log.lock().unwrap().iter().any(|l| l == "cc main.c"));
+        assert_eq!(run.progress.lock().unwrap().step, "Building the app");
+        assert_eq!(run.log.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn stop_ends_the_whole_group_and_reads_as_stopped() {
+        let d = scratch("stop");
+        let pid = d.join("pid");
+        // (a build: sh, and its own child that ignores nothing)
+        std::fs::write(
+            d.join("build.sh"),
+            format!("sleep 30 & echo $! > '{}'\nwait\n", pid.display()),
+        )
+        .unwrap();
+        let mut run = Run::create(&d, None, || {}).unwrap();
+        wait_for(|| std::fs::read_to_string(&pid).is_ok_and(|t| t.ends_with('\n')));
+        let pid: i32 = std::fs::read_to_string(&pid)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        run.stop();
+        assert_eq!(wait_exit(&mut run), STOPPED);
+        wait_for(|| unsafe { libc::kill(pid, 0) } != 0);
+    }
+
+    #[test]
+    fn a_crash_and_an_exit_code_read_as_such() {
+        let d = scratch("crash");
+        let exe = app(&d, "kill -SEGV $$");
+        let mut run = Run::game(&exe, None, false, None, || {}, None).unwrap();
+        assert_eq!(wait_exit(&mut run), "crashed (signal 11 SIGSEGV)");
+        let exe = app(&d, "exit 3");
+        let mut run = Run::game(&exe, None, false, None, || {}, None).unwrap();
+        assert_eq!(wait_exit(&mut run), "exited with code 3");
+    }
 }

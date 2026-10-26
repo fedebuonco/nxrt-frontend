@@ -522,4 +522,124 @@ mod tests {
         };
         assert_eq!(game_dir(&abs), PathBuf::from("/elsewhere/game"));
     }
+
+    fn gathered(s: runner::Status) -> Gathered {
+        Gathered {
+            status: Some(Ok(s)),
+            ..Default::default()
+        }
+    }
+
+    fn app_entry() -> Entry {
+        Entry {
+            exe: Some("/apps/demo".into()),
+            package: Some("/g/demo.nsp".into()),
+            title_id: "0100000000010000".into(),
+            ..Default::default()
+        }
+    }
+
+    fn next_of(e: &Entry, g: &Gathered) -> Option<String> {
+        view(0, e, g, None, None, None).next.map(|n| n.kind)
+    }
+
+    #[test]
+    fn the_steps_come_in_order() {
+        let e = app_entry();
+        let mut s = runner::Status {
+            builder: true,
+            code_id: "c1".into(),
+            ..Default::default()
+        };
+        assert_eq!(next_of(&e, &gathered(s.clone())).as_deref(), Some("files"));
+        s.files_ready = true;
+        assert_eq!(
+            next_of(&e, &gathered(s.clone())).as_deref(),
+            Some("generate")
+        );
+        let generated = Entry {
+            generated_for: "c1".into(),
+            ..app_entry()
+        };
+        assert_eq!(
+            next_of(&generated, &gathered(s.clone())).as_deref(),
+            Some("compile")
+        );
+        // (generated for other game code: generate again)
+        let stale = Entry {
+            generated_for: "c0".into(),
+            ..app_entry()
+        };
+        assert_eq!(
+            next_of(&stale, &gathered(s.clone())).as_deref(),
+            Some("generate")
+        );
+        s.code_ready = true;
+        s.ready = true;
+        let v = view(0, &e, &gathered(s), None, None, None);
+        assert_eq!(v.next.unwrap().kind, "play");
+        assert_eq!((v.state.as_str(), v.tone.as_str()), ("Ready to play", "ok"));
+    }
+
+    #[test]
+    fn a_source_checkout_builds_its_code_itself() {
+        let e = Entry {
+            build_dir: Some("/src/demo".into()),
+            build_cmd: Some("make".into()),
+            ..app_entry()
+        };
+        let s = runner::Status {
+            files_ready: true,
+            ..Default::default()
+        };
+        assert_eq!(next_of(&e, &gathered(s)).as_deref(), Some("build"));
+    }
+
+    #[test]
+    fn a_game_without_its_app_or_its_base() {
+        let no_app = Entry {
+            exe: None,
+            ..app_entry()
+        };
+        assert_eq!(
+            next_of(&no_app, &Gathered::default()).as_deref(),
+            Some("create")
+        );
+        let update_only = Entry {
+            package: None,
+            update: Some("/g/upd.nsp".into()),
+            ..app_entry()
+        };
+        let v = view(0, &update_only, &Gathered::default(), None, None, None);
+        assert_eq!(v.next.unwrap().kind, "add-base");
+        assert_eq!(v.tone, "warn");
+    }
+
+    #[test]
+    fn a_running_game_has_no_next_step_and_an_app_that_fails_says_why() {
+        let e = app_entry();
+        let running = RunInfo {
+            playing: true,
+            ..Default::default()
+        };
+        let v = view(
+            0,
+            &e,
+            &gathered(runner::Status::default()),
+            None,
+            Some(running),
+            None,
+        );
+        assert!(v.next.is_none());
+        assert_eq!(v.state, "Playing");
+        let failed = Gathered {
+            describe: Some(Err("doesn't answer --describe".into())),
+            status: Some(Err("doesn't answer --status".into())),
+            ..Default::default()
+        };
+        let v = view(0, &e, &failed, None, None, None);
+        assert_eq!(v.tone, "error");
+        assert_eq!(v.load_error.as_deref(), Some("doesn't answer --describe"));
+        assert!(v.next.is_none());
+    }
 }
