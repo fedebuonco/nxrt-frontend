@@ -6,3 +6,6 @@ src-tauri/nxrt
 nxrt
 assets
 package-lock.json
+
+playwright-report
+test-results

@@ -7,3 +7,7 @@ src-tauri/nxrt/
 
 # Vite's built window (Tauri embeds it)
 web-dist/
+
+# Playwright
+playwright-report/
+test-results/

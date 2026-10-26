@@ -61,6 +61,11 @@ This stands on a lot of shoulders.
 - **The window:** Tauri, Vite, the Rust crates (serde, gilrs, tracing, rfd, base64, toml, dirs), Prettier and ESLint.
 - **And everyone who tested, documented, and filed an issue.**
 
+## Tests
+
+`cargo test --manifest-path src-tauri/Cargo.toml` (backend), `npm test` (window units), `npm run test:e2e` (the UI with a mocked Tauri).
+See [docs/TESTING.md](docs/TESTING.md).
+
 ## Docs
 
 - [Using nxrt-frontend](docs/USAGE.md) — adding games, controller settings, updates, logs, the CLI.

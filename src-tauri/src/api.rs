@@ -478,3 +478,48 @@ fn next_action(
         primary: true,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::Entry;
+    use std::path::PathBuf;
+
+    #[test]
+    fn game_keys_are_stable_across_library_edits() {
+        let mut e = Entry::default();
+        assert_eq!(game_key(&e), "entry");
+        e.title_id = "0100ABC".into();
+        assert_eq!(game_key(&e), "tid:0100abc");
+        e.title_id.clear();
+        e.exe = Some(PathBuf::from("/apps/game"));
+        assert_eq!(game_key(&e), "exe:/apps/game");
+        e.exe = None;
+        e.package = Some(PathBuf::from("/games/a.nsp"));
+        assert_eq!(game_key(&e), "pkg:/games/a.nsp");
+        e.package = None;
+        e.update = Some(PathBuf::from("/games/a-update.nsp"));
+        assert_eq!(game_key(&e), "upd:/games/a-update.nsp");
+    }
+
+    #[test]
+    fn a_relative_game_dir_is_resolved_in_the_data_root() {
+        let st = runner::Status {
+            data_root: "/data".into(),
+            game_dir: "extracted".into(),
+            files: String::new(),
+            status: String::new(),
+            code_id: String::new(),
+            files_ready: false,
+            code_ready: false,
+            ready: false,
+            builder: false,
+        };
+        assert_eq!(game_dir(&st), PathBuf::from("/data/extracted"));
+        let abs = runner::Status {
+            game_dir: "/elsewhere/game".into(),
+            ..st
+        };
+        assert_eq!(game_dir(&abs), PathBuf::from("/elsewhere/game"));
+    }
+}
