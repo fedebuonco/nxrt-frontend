@@ -396,6 +396,7 @@ impl Run {
             .arg("-k")
             .arg(keys)
             .args(["--platform", "mac", "--progress", "json"])
+            .env("PATH", crate::nxnative::tool_path())
             .current_dir(repo);
         Run::spawn(c, nsp_dir, Kind::NxBuild, log_file, repaint)
     }

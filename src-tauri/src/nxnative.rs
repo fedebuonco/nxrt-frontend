@@ -25,6 +25,31 @@ pub fn python(repo: &Path) -> PathBuf {
     }
 }
 
+/// The PATH the build runs with: the app's own, then where Homebrew and the .NET installer put the tools the script
+/// needs (dotnet, spirv-cross, glslangValidator) - an app opened from Finder has only /usr/bin:/bin:/usr/sbin:/sbin.
+pub fn tool_path() -> String {
+    let mut dirs: Vec<String> = std::env::var("PATH")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|d| !d.is_empty())
+        .map(String::from)
+        .collect();
+    for d in [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/local/share/dotnet",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ] {
+        if !dirs.iter().any(|x| x == d) {
+            dirs.push(d.to_string());
+        }
+    }
+    dirs.join(":")
+}
+
 /// The game's NSP folder: the folder of its package (nxnative builds from a folder holding one game's NSPs).
 pub fn nsp_dir(e: &Entry) -> Option<PathBuf> {
     let p = e.package.as_deref().or(e.update.as_deref())?;
@@ -93,4 +118,15 @@ pub fn probe(e: &Entry, repo: &Path) -> Probe {
 }
 
 /// The message the script prints before the command that runs the game (build_ipa_from_nsp.py, a Mac-only build).
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_tools_path_has_homebrew_and_dotnet() {
+        let p = super::tool_path();
+        for d in ["/opt/homebrew/bin", "/usr/local/share/dotnet", "/usr/bin"] {
+            assert!(p.split(':').any(|x| x == d), "{p}");
+        }
+    }
+}
+
 pub const RUN_COMMAND_FOLLOWS: &str = "done: the game runs on the Mac with this command";
