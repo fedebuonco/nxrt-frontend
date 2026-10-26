@@ -30,6 +30,8 @@ test('the controller map test mode lights a pressed button', async ({ page }) =>
   await page.evaluate(() => window.__emit('pad-button', { button: 'south', pressed: true }));
   const south = page.locator('.controller-map [data-host="south"]');
   await expect(south).toHaveClass(/on/);
+  await expect(south).toHaveClass(/blink/);
+  await expect(south.locator('.pad-map')).not.toBeEmpty();
   await expect(page.locator('.pad-test-caption')).toContainText('Bottom (A)');
 
   await page.evaluate(() => window.__emit('pad-button', { button: 'south', pressed: false }));

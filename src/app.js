@@ -812,51 +812,27 @@ import { ICONS } from './js/icons.js';
     const inputs = inputsForHost(S.padLast).map(ctrlInputLabel).join(', ');
     return `${esc(hostName(S.padLast))} <span class="arrow">→</span> ${inputs ? `<b>${esc(inputs)}</b>` : '<span class="muted">not bound</span>'}`;
   }
-  function controllerSvg() {
+  // The controls as a list, grouped as on a pad: each row the pad's button, what it is, and the nxrt input it sends.
+  // A row lights while its button is held and blinks on each press (updatePadMap).
+  function controllerList() {
     const L = padLabels(S.pad.name);
-    const mapped = (host) => inputsForHost(host).map(ctrlInputLabel).join(' · ') || '–';
-    const on = (host) => (S.padHeld.has(host) ? ' on' : '');
-    const group = (host, inner) => `<g class="pad-host${on(host)}" data-host="${host}">${inner}</g>`;
-    const face = (host, x, y, glyph) =>
-      group(
-        host,
-        `<circle class="pad-btn" cx="${x}" cy="${y}" r="16"/><text class="pad-glyph" x="${x}" y="${y + 4}" text-anchor="middle">${esc(glyph)}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 29}" text-anchor="middle">${esc(mapped(host))}</text>`,
-      );
-    const shoulder = (host, x, label) =>
-      group(
-        host,
-        `<rect class="pad-shoulder" x="${x}" y="70" width="118" height="20" rx="10"/><text class="pad-key" x="${x + 11}" y="84">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 107}" y="84" text-anchor="end">${esc(mapped(host))}</text>`,
-      );
-    const trigger = (host, x, label) =>
-      group(
-        host,
-        `<rect class="pad-trigger" x="${x}" y="48" width="82" height="16" rx="8"/><text class="pad-key" x="${x + 10}" y="59">${label}</text><text class="pad-map pad-map-in" data-map="${host}" x="${x + 72}" y="59" text-anchor="end">${esc(mapped(host))}</text>`,
-      );
-    const stick = (host, x, y, label) =>
-      group(
-        host,
-        `<circle class="pad-stick-out" cx="${x}" cy="${y}" r="28"/><circle class="pad-stick-in" cx="${x}" cy="${y}" r="19"/><text class="pad-glyph" x="${x}" y="${y + 3}" text-anchor="middle" font-size="8">${label}</text><text class="pad-map" data-map="${host}" x="${x}" y="${y + 45}" text-anchor="middle">${esc(mapped(host))}</text>`,
-      );
-    const dir = (host, x, y, w, h) =>
-      group(host, `<rect class="pad-dir" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/>`);
-    const pill = (host, x, glyph) =>
-      group(
-        host,
-        `<rect class="pad-btn" x="${x}" y="110" width="24" height="13" rx="6.5"/><text class="pad-glyph" x="${x + 12}" y="120" text-anchor="middle" font-size="8">${glyph}</text><text class="pad-map" data-map="${host}" x="${x + 12}" y="134" text-anchor="middle">${esc(mapped(host))}</text>`,
-      );
-    return `<svg viewBox="0 0 560 350" role="img" aria-label="Controller with its button bindings">
-      <path class="pad-body" d="M132 92 C78 92 58 136 66 206 C74 278 108 316 150 306 C192 296 205 252 232 244 L328 244 C355 252 368 296 410 306 C452 316 486 278 494 206 C502 136 482 92 428 92 Z"/>
-      ${trigger('ltrigger', 120, 'LT')}${trigger('rtrigger', 358, 'RT')}
-      ${shoulder('lshoulder', 102, 'LB')}${shoulder('rshoulder', 340, 'RB')}
-      ${stick('lstick', 176, 156, 'L3')}${stick('rstick', 348, 245, 'R3')}
-      ${dir('dpad_up', 166, 223, 20, 22)}${dir('dpad_down', 166, 265, 20, 22)}
-      ${dir('dpad_left', 146, 245, 22, 20)}${dir('dpad_right', 184, 245, 22, 20)}
-      <rect class="pad-dir-core" x="166" y="245" width="20" height="20" rx="3"/>
-      ${pill('back', 238, '⧉')}${pill('start', 298, '☰')}
-      ${group('guide', '<circle class="pad-guide" cx="280" cy="88" r="10"/>')}
-      ${face('north', 392, 118, L.north)}${face('east', 436, 162, L.east)}
-      ${face('south', 392, 206, L.south)}${face('west', 348, 162, L.west)}
-    </svg>`;
+    const mapped = (host) => inputsForHost(host).map(ctrlInputLabel).join(' · ');
+    const row = (host, glyph, name) => {
+      const m = mapped(host);
+      return `<li class="pad-host${S.padHeld.has(host) ? ' on' : ''}" data-host="${host}" title="${esc(hostName(host))}">
+          <span class="pad-chip">${esc(glyph)}</span>
+          <span class="pad-name">${esc(name)}</span>
+          <span class="pad-map${m ? '' : ' none'}" data-map="${host}">${esc(m || 'not bound')}</span>
+        </li>`;
+    };
+    const group = (title, rows) =>
+      `<div class="pad-group"><div class="pad-group-title">${title}</div><ul>${rows.join('')}</ul></div>`;
+    return `<div class="pad-groups" role="list" aria-label="Controller buttons and the inputs they send">
+      ${group('Face buttons', [row('south', L.south, 'Bottom'), row('east', L.east, 'Right'), row('west', L.west, 'Left'), row('north', L.north, 'Top')])}
+      ${group('Shoulders', [row('lshoulder', 'LB', 'Left bumper'), row('rshoulder', 'RB', 'Right bumper'), row('ltrigger', 'LT', 'Left trigger'), row('rtrigger', 'RT', 'Right trigger')])}
+      ${group('D-pad', [row('dpad_up', '↑', 'Up'), row('dpad_down', '↓', 'Down'), row('dpad_left', '←', 'Left'), row('dpad_right', '→', 'Right')])}
+      ${group('Sticks and menu', [row('lstick', 'L3', 'Left stick'), row('rstick', 'R3', 'Right stick'), row('back', '−', 'Back'), row('start', '+', 'Start'), row('guide', 'Home', 'Guide')])}
+    </div>`;
   }
   function controllerMapCard() {
     const connected = S.pad.connected;
@@ -867,19 +843,29 @@ import { ICONS } from './js/icons.js';
         <span class="spacer"></span>
         <button class="btn secondary sm" data-act="${S.padTest ? 'pad-test-stop' : 'pad-test'}" ${connected ? '' : 'disabled'}>${S.padTest ? 'Stop' : 'Test'}</button>
       </div>
-      <p>${S.padTest ? 'Press any button on the controller; the map lights and the line below names the nxrt input it sends. Esc or Stop finishes.' : 'Your controller defaults at a glance: the large label is the pad’s button, the small one the nxrt input it sends. Test to light each button as you press it.'}</p>
-      <div class="controller-map">${controllerSvg()}</div>
+      <p>${S.padTest ? 'Press any button on the controller: its row lights while held and blinks on each press, and the line below names the nxrt input it sends. Esc or Stop finishes.' : 'Your controller defaults at a glance: each of the pad’s buttons and the nxrt input it sends. Test to see each one as you press it.'}</p>
       <div class="pad-test-caption">${padTestCaption()}</div>
-      <p class="small">A game's Controls can override these. The diagram covers the face, shoulders, triggers, sticks and D-pad; paddles and touchpads are in the bindings list below.</p>
+      <div class="controller-map">${controllerList()}</div>
+      <p class="small">A game's Controls can override these. Paddles and touchpads are in the bindings list below.</p>
     </section>`;
   }
   function updatePadMap() {
     const root = document.querySelector('.controller-map');
     if (root) {
-      root.querySelectorAll('[data-host]').forEach((el) => el.classList.toggle('on', S.padHeld.has(el.dataset.host)));
+      root.querySelectorAll('[data-host]').forEach((el) => {
+        const held = S.padHeld.has(el.dataset.host);
+        if (held && !el.classList.contains('on')) {
+          // (a new press: the blink restarts)
+          el.classList.remove('blink');
+          void el.offsetWidth;
+          el.classList.add('blink');
+        }
+        el.classList.toggle('on', held);
+      });
       root.querySelectorAll('[data-map]').forEach((el) => {
         const inputs = inputsForHost(el.dataset.map).map(ctrlInputLabel).join(' · ');
-        el.textContent = inputs || '–';
+        el.textContent = inputs || 'not bound';
+        el.classList.toggle('none', !inputs);
       });
     }
     const cap = document.querySelector('.pad-test-caption');
