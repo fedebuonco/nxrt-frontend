@@ -5,7 +5,8 @@
 use crate::state::{PadStatus, Shared};
 use gilrs::{Axis, Button, EventType, Gilrs};
 use serde::Serialize;
-use std::time::Duration;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 #[derive(Serialize, Clone)]
@@ -56,13 +57,21 @@ pub fn start(app: AppHandle, shared: Shared) {
         // An axis counts only once it has been seen at rest: a stick that drifts or rests off centre, or an axis that
         // rests at an end (some pads report one for a trigger, a gyro or nothing), must not drive the window by itself.
         let mut rest = Rest::default();
+        // A "button" that changes faster than a hand can press is not a button: a Pro Controller in its full report
+        // mode (after a game's SDL switched it) reads to gilrs's default mapping as a timer byte, counting through
+        // buttons 2-7 125 times a second - every count a press the window acts on.
+        let mut chatter = Chatter::default();
         loop {
             // (blocking: a GUI has no event loop of its own to spin)
             let Some(ev) = gilrs.next_event_blocking(Some(Duration::from_millis(500))) else {
                 continue;
             };
             match ev.event {
-                EventType::ButtonPressed(b, _) => {
+                EventType::ButtonPressed(b, code) => {
+                    tracing::debug!(target: "pads", button = ?b, code = %code, "button pressed");
+                    if chatter.noisy(code.into_u32(), b) {
+                        continue;
+                    }
                     if let Some(name) = button_name(b) {
                         let _ = app.emit(
                             "pad-button",
@@ -79,7 +88,23 @@ pub fn start(app: AppHandle, shared: Shared) {
                         _ => {}
                     }
                 }
-                EventType::ButtonReleased(b, _) => {
+                EventType::ButtonReleased(b, code) => {
+                    tracing::debug!(target: "pads", button = ?b, code = %code, "button released");
+                    if chatter.noisy(code.into_u32(), b) {
+                        // (its first noisy change: the window is told it is up, then hears no more of it)
+                        if chatter.just_marked.take() == Some(code.into_u32()) {
+                            if let Some(name) = button_name(b) {
+                                let _ = app.emit(
+                                    "pad-button",
+                                    PadButton {
+                                        button: name.into(),
+                                        pressed: false,
+                                    },
+                                );
+                            }
+                        }
+                        continue;
+                    }
                     if let Some(name) = button_name(b) {
                         let _ = app.emit(
                             "pad-button",
@@ -96,7 +121,7 @@ pub fn start(app: AppHandle, shared: Shared) {
                     }
                 }
                 EventType::ButtonRepeated(_, _) => {}
-                EventType::AxisChanged(axis, value, _) => match axis {
+                EventType::AxisChanged(axis, value, code) => match axis {
                     Axis::LeftStickX => {
                         lx = if rest.see(0, value.abs() < 0.25) {
                             value
@@ -119,13 +144,14 @@ pub fn start(app: AppHandle, shared: Shared) {
                     Axis::RightZ if rest.see(3, value < 0.2) => {
                         set_trigger(&app, "right", value > 0.45, &mut rt)
                     }
-                    _ => {}
+                    _ => tracing::trace!(target: "pads", axis = ?axis, code = %code, value, "axis"),
                 },
                 EventType::Connected | EventType::Disconnected => {
                     last_dir.clear();
                     lx = 0.0;
                     ly = 0.0;
                     rest = Rest::default();
+                    chatter = Chatter::default();
                     let first = status(&gilrs);
                     if first.connected {
                         tracing::info!(target: "pads", name = ?first.name, "controller connected at start");
@@ -138,6 +164,40 @@ pub fn start(app: AppHandle, shared: Shared) {
             }
         }
     });
+}
+
+/// Buttons that change state impossibly fast (4 changes within 120 ms): ignored until the pad reconnects.
+#[derive(Default)]
+struct Chatter {
+    changes: HashMap<u32, VecDeque<Instant>>,
+    ignored: HashSet<u32>,
+    /// (the code marked noisy by the last call, so its release can still reach the window once)
+    just_marked: Option<u32>,
+}
+
+impl Chatter {
+    fn noisy(&mut self, code: u32, b: Button) -> bool {
+        if self.ignored.contains(&code) {
+            return true;
+        }
+        let now = Instant::now();
+        let q = self.changes.entry(code).or_default();
+        q.push_back(now);
+        while q
+            .front()
+            .is_some_and(|t| now.duration_since(*t) > Duration::from_millis(120))
+        {
+            q.pop_front();
+        }
+        if q.len() >= 4 {
+            self.ignored.insert(code);
+            self.just_marked = Some(code);
+            tracing::warn!(target: "pads", code, button = ?b,
+                "a button changes faster than it can be pressed: ignored until the controller reconnects");
+            return true;
+        }
+        false
+    }
 }
 
 /// Which axes (left stick x, y, left and right trigger) have been seen at rest since the pad connected.
@@ -232,4 +292,28 @@ fn button_name(b: Button) -> Option<&'static str> {
         Button::RightThumb => "r3",
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_counting_button_is_ignored_a_pressed_one_is_not() {
+        let mut c = Chatter::default();
+        // a hand: press, release, press, release - far apart
+        for _ in 0..2 {
+            assert!(!c.noisy(1, Button::South));
+            std::thread::sleep(Duration::from_millis(70));
+            assert!(!c.noisy(1, Button::South));
+            std::thread::sleep(Duration::from_millis(70));
+        }
+        // a counter bit: four changes in a few milliseconds
+        assert!(!c.noisy(2, Button::East));
+        assert!(!c.noisy(2, Button::East));
+        assert!(!c.noisy(2, Button::East));
+        assert!(c.noisy(2, Button::East));
+        assert!(c.noisy(2, Button::East), "stays ignored");
+        assert!(!c.noisy(1, Button::South), "the other button still counts");
+    }
 }
