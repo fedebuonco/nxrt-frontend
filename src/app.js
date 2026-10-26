@@ -45,15 +45,15 @@ import { ICONS } from './js/icons.js';
 
   const ABOUT = {
     package:
-      "Your copy of the game (.nsp / .xci). Never changed: the game's data is read from it in place, so keep it where it is.",
+      "Your copy of the game (.nsp / .xci), in its NSP folder: nxnative builds from that folder (one game's NSPs: base, update, DLC). Never changed.",
     update:
       "The game's update (.nsp): its new code, and its changes to the game's data, read in place with the base package. Keep it where it is.",
     keys: 'The keys from your own Switch (prod.keys). Needed to read the package; nothing is decrypted to disk.',
-    app: "The recomp's program: it runs this game (and does its setup steps). The manager starts it.",
+    app: "nxnative's build of this game for this Mac: the extracted files, the rewritten code, the Metal shaders and the host (<NSP folder>/<title ID>_build). Safe to delete: Build for Mac makes it again.",
     recomp:
       'The recomp the manager created for this game: its source (Makefile, runtime/<id>_game.c, tools/patches.py). Edit it to work on the port; build.sh rebuilds the app.',
-    data: "Yours: the game's settings, saves and their backups, mods, and the shader cache. Back this folder up; deleting it loses your saves.",
-    game: "Made from the package: the game's code files (exefs), a pointer to its data in the package (romfs.src), and the built game code (.gamebuild, the game's library). Safe to delete: the steps make it again.",
+    data: "Yours: the game's saves (save/), kept from build to build. Back this folder up; deleting it loses your saves.",
+    game: "The game's files extracted from its NSPs (exefs, romfs), what the host runs. Safe to delete: Build for Mac extracts them again.",
     logs: 'A log of every run and step the manager started: what to send when something goes wrong.',
   };
 
@@ -347,7 +347,6 @@ import { ICONS } from './js/icons.js';
         </div>
         <div class="actions">
           <button class="btn ghost" data-act="refresh">Refresh</button>
-          <button class="btn secondary" data-act="add-app">Add an nxrt app</button>
           <button class="btn primary" data-act="add-game">${ICONS.plus} Add a Switch game</button>
         </div>
       </header>
@@ -378,10 +377,9 @@ import { ICONS } from './js/icons.js';
     return `<div class="empty">
       <div class="badge-icon">${ICONS.grid}</div>
       <h2>Your library is empty</h2>
-      <p>Add a Switch game from its .nsp or .xci: its name, icon and version come from the package itself.</p>
+      <p>Add a Switch game from its .nsp or .xci, kept in a folder of its own (with its update and DLC): nxnative builds it for this Mac from that folder.</p>
       <div class="actions">
         <button class="btn primary" data-act="add-game">${ICONS.plus} Add a Switch game</button>
-        <button class="btn secondary" data-act="add-app">Add an nxrt app</button>
       </div>
     </div>`;
   }
@@ -437,8 +435,7 @@ import { ICONS } from './js/icons.js';
   function heroActions(g) {
     if (g.running) return `<button class="btn secondary" data-act="stop">${ICONS.stop} Stop</button>`;
     if (!g.exe) return '';
-    return `<button class="btn primary" data-act="play" ${g.ready ? '' : 'disabled'}>${ICONS.play} Play</button>
-      <button class="btn secondary" data-act="start-screen">${ICONS.screen} Start screen</button>`;
+    return `<button class="btn primary" data-act="play" ${g.ready ? '' : 'disabled'}>${ICONS.play} Play</button>`;
   }
 
   function noApp(g) {
@@ -451,11 +448,9 @@ import { ICONS } from './js/icons.js';
         : '';
     return `<section class="card noapp">
       ${update}
-      <h2>No recomp runs this game yet</h2>
-      <p>If its recomp exists, add its app. Otherwise make one from the package: a plain recompilation to start a port from.</p>
+      <h2>This game has no NSP folder</h2>
+      <p>nxnative builds a game from the folder holding its NSPs: add the game's .nsp or .xci.</p>
       <div class="actions">
-        ${g.package ? '<button class="btn primary" data-act="create">Create a recomp</button>' : ''}
-        <button class="btn secondary" data-act="choose-app">Choose its app…</button>
         <button class="btn danger" data-act="remove">Remove from the list</button>
       </div>
       ${g.running ? progressHtml(g) : g.last_exit ? exitHtml(g) : ''}
@@ -471,11 +466,9 @@ import { ICONS } from './js/icons.js';
         <span class="small">${done} of ${steps.length} done</span>
         <span class="spacer"></span>
         <div class="menu">
-          <button class="btn secondary sm" data-act="menu">Set up again ${ICONS.chevron}</button>
+          <button class="btn secondary sm" data-act="menu">Build again ${ICONS.chevron}</button>
           <div class="menu-pop" hidden>
-            <button data-act="setup-package">From a game package (.nsp / .xci)…</button>
-            <button data-act="setup-folder">From a folder (exefs + romfs)…</button>
-            ${g.steps.files ? '<button data-act="rebuild">Generate and compile again</button>' : ''}
+            <button data-act="nx-build">Build for Mac again</button>
           </div>
         </div>
       </div>
@@ -519,12 +512,13 @@ import { ICONS } from './js/icons.js';
       });
     } else {
       list.push({
-        title: 'Build the game code',
-        detail: "This app's Dev build command",
+        title: 'Build for Mac',
+        detail:
+          "nxnative's build: the game's code rewritten for this Mac, its shaders translated to Metal, the host built",
         done: g.steps.code,
         running: r.kind === 'all' || r.kind === 'build',
         next: n.kind === 'build',
-        label: 'Build',
+        label: 'Build for Mac',
         stage: 'build',
       });
     }
@@ -634,8 +628,7 @@ import { ICONS } from './js/icons.js';
     add('Update', 'keep', 'keep', ABOUT.update, g.update, true);
     add('Data folder', 'back up', 'backup', ABOUT.data, g.data_root, false);
     add('Game folder', 'rebuildable', 'rebuild', ABOUT.game, g.game_dir, false);
-    add('App', 'keep', 'keep', ABOUT.app, g.exe, true);
-    add('Recomp folder', 'source', 'source', ABOUT.recomp, g.recomp_dir, false);
+    add('Build folder', 'rebuildable', 'rebuild', ABOUT.app, g.exe, false);
     add('Keys', 'keep', 'keep', ABOUT.keys, g.keys, true);
     return `<section class="card places">
       <div class="section-title">Where things are</div>
@@ -1115,9 +1108,9 @@ import { ICONS } from './js/icons.js';
         ${controllerMapCard()}
         ${controlsDefaultsCard()}
         <section class="card setting">
-          <div class="setting-head"><span class="section-title">New recomps</span></div>
-          <p>Where Create a recomp puts them. The nxrt source is built into the app; set <span class="mono">NXRT_DIR</span> to use another checkout while developing.</p>
-          <div class="path">${esc(s.recomps_dir)}<br><span class="muted">nxrt</span>&nbsp; ${esc(s.nxrt_dir)}</div>
+          <div class="setting-head"><span class="section-title">nxnative</span></div>
+          <p>The nxnative checkout that builds and runs the games (github.com/seedds/nxnative); set <span class="mono">NXNATIVE_DIR</span> to use another.</p>
+          <div class="path">${esc(s.nxrt_dir)}</div>
         </section>
         <section class="card setting">
           <div class="setting-head"><span class="section-title">The manager's own files</span><span class="spacer"></span><button class="btn secondary" data-act="open-config">Show in Finder</button></div>
@@ -1125,7 +1118,7 @@ import { ICONS } from './js/icons.js';
           <div class="path">${esc(s.config_dir)}</div>
           <div style="border-top:1px solid var(--line);margin:14px 0 12px"></div>
           <div style="display:flex;align-items:center;gap:12px">
-            <div style="flex:1"><div style="font-size:12px">nxrt-frontend</div><div class="muted small">A manager for the nxrt Switch recomps.</div></div>
+            <div style="flex:1"><div style="font-size:12px">nxnative frontend</div><div class="muted small">nxrt-frontend's manager, running games with nxnative.</div></div>
             ${tag(`v${s.version}`, '')}
           </div>
         </section>
@@ -1692,6 +1685,8 @@ import { ICONS } from './js/icons.js';
         return setupFrom('folder');
       case 'rebuild':
         return setupFrom('all');
+      case 'nx-build':
+        return g && startDev(g);
       case 'add-base':
         return addBase();
       case 'create':
@@ -1953,7 +1948,7 @@ import { ICONS } from './js/icons.js';
       return;
     }
     if (!g.ready) {
-      toast(g.exe ? 'Not ready to play yet: finish Setup first' : 'No nxrt app for this game yet', 'error');
+      toast(g.exe ? 'Not ready to play yet: Build for Mac first' : 'No NSP folder for this game', 'error');
       return;
     }
     if (S.view !== 'game') go('game', g.key);

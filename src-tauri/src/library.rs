@@ -52,6 +52,9 @@ pub struct Entry {
     /// controller settings for this game, layered over the library's defaults (controls.rs)
     #[serde(default, skip_serializing_if = "Controls::is_empty")]
     pub controls: Controls,
+    /// nxnative: the command that runs the game, as its Mac build printed it (nxnative.rs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_cmd: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -64,6 +67,9 @@ pub struct Library {
     pub controls: Controls,
     #[serde(default, rename = "game")]
     pub games: Vec<Entry>,
+    /// the nxnative checkout (nxnative.rs repo: NXNATIVE_DIR, else this, else the SSD's development volume)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nxnative_dir: Option<PathBuf>,
     /// (not saved) the library file could not be read: where it was moved, so nothing overwrites it
     #[serde(skip)]
     pub load_error: Option<String>,
@@ -88,7 +94,7 @@ pub fn check_keys(p: &Path) -> Result<(), String> {
 pub fn dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("nxrt-frontend")
+        .join("nxnative-frontend") // (its own library: the nxrt manager's is left alone)
 }
 
 pub fn icon_path(title_id: &str) -> PathBuf {

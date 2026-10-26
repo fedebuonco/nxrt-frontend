@@ -142,3 +142,19 @@ for (const [kind, want] of [
       .toEqual([{ key: demo.key, ...want }]);
   });
 }
+
+test('an nxnative game is built for Mac, then played', async ({ page }) => {
+  const snap = structuredClone(snapshot);
+  Object.assign(snap.games[0], {
+    ready: false,
+    state: 'Next: build it for this Mac',
+    tone: 'warn',
+    steps: { files: false, generated: false, code: false, builder: false, dev: true },
+    next: { label: 'Build for Mac', kind: 'build', primary: true },
+  });
+  await open(page, {}, snap);
+  await openDemo(page);
+  await expect(page.locator('.steps .name').nth(1)).toHaveText('Build for Mac');
+  await page.locator('.steps [data-act="next"]').click();
+  await expect.poll(async () => (await calls(page, 'start_dev')).map((c) => c.args)).toEqual([{ key: demo.key }]);
+});

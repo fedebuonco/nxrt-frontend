@@ -8,6 +8,7 @@ mod issues;
 mod library;
 mod logging;
 mod manage;
+mod nxnative;
 mod ops;
 mod pads;
 mod recomp;

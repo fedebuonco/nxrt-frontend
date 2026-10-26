@@ -75,6 +75,7 @@ impl Controls {
     }
 
     /// This set with `over` layered on top (used for defaults + a game's own overrides).
+    #[allow(dead_code)] // (nxnative's host reads its own controller settings: not passed to it yet)
     pub fn merged(&self, over: &Controls) -> Controls {
         let mut bind_pad = self.bind_pad.clone();
         bind_pad.extend(over.bind_pad.iter().map(|(k, v)| (k.clone(), v.clone())));
@@ -111,6 +112,7 @@ impl Controls {
     }
 
     /// The lines the game's input section understands (input/input.c input_key).
+    #[allow(dead_code)] // (nxnative's host reads its own controller settings: not passed to it yet)
     pub fn lines(&self) -> Vec<String> {
         let mut out = Vec::new();
         if let Some(p) = &self.prompts {
@@ -137,6 +139,7 @@ impl Controls {
     }
 
     /// Writes the overlay the game reads. An empty set removes any old one.
+    #[allow(dead_code)] // (nxnative's host reads its own controller settings: not passed to it yet)
     pub fn write_overlay(&self, path: &Path) -> Result<(), String> {
         if self.is_empty() {
             let _ = std::fs::remove_file(path);
@@ -154,6 +157,7 @@ impl Controls {
 }
 
 /// Where a game's effective controls are written before it starts.
+#[allow(dead_code)] // (see merged)
 pub fn overlay_path(key: &str) -> PathBuf {
     let mut safe: String = key
         .chars()
