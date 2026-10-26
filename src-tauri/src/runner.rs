@@ -157,8 +157,11 @@ pub struct Run {
 impl Run {
     /// The game: `--play` boots straight into it (the manager is the start screen), without it the app's own start
     /// screen comes up (its settings, setup).
-    pub fn game(exe: &Path, data_root: Option<&Path>, play: bool, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+    pub fn game(exe: &Path, data_root: Option<&Path>, play: bool, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static, controls: Option<&Path>) -> Result<Run, String> {
         let mut c = command(exe, data_root);
+        if let Some(p) = controls {
+            c.env("NXRT_CONTROLLER", p);
+        }
         if play {
             c.arg("--play");
         }

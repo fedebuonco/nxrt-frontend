@@ -96,13 +96,30 @@ running game does not also drive the manager.
 The same moves work from the keyboard: **arrows** to move, **Enter** / **Space** to select, **Esc** to go back, **[** and
 **]** to change section. With no controller the hints bar stays hidden; Settings still shows the map.
 
+## Controller settings: for every game, or one
+
+**Settings → Controller defaults** holds the bindings and input preferences passed to every game when it starts. A game's
+own page has a **Controls** disclosure; rows there override the defaults for that game only. Both are sparse: a row left
+on **Game's own** (defaults) or **Use defaults** (a game) leaves the game's setting alone, and a row set in the manager
+wins over the game's own for that key. With a controller, focus a row and use **← →** (or **A**) to change it; with a
+mouse or keyboard, use its selector.
+
+The manager does not edit the game's `nx_app.ini`. Before a launch it writes the merged settings — the defaults, then the
+game's overrides — to `~/Library/Application Support/nxrt-frontend/controls/<game>.conf`, and starts the game with
+`NXRT_CONTROLLER=<that file>`. The game's input layer reads it after its own settings, so the manager's rows are the
+effective ones (the game's start screen shows them). A row the manager does not set stays the game's.
+
+The overlay is read by the `nxrt` submodule (`input/input.c`, `input_loaded`). A game app built before that revision
+ignores `NXRT_CONTROLLER`; rebuild the app to pick it up.
+
 ## Where things are
 
 The library is `~/Library/Application Support/nxrt-frontend/library.toml` (`NXRT_FRONTEND_LIBRARY` overrides it), the
 games' icons beside it in `icons/`, and the runs' logs in `logs/`. New recomps go in `recomps/` by default.
 
-The manager never edits a game's settings or saves: the game's own app owns them. Removing a game from the library
-removes it from this list only; nothing on disk is deleted.
+The manager never edits a game's settings or saves: the game's own app owns them. Controller settings are passed as an
+overlay at launch (see above), not written into the game's file. Removing a game from the library removes it from this
+list only; nothing on disk is deleted.
 
 ## Command line
 
@@ -147,6 +164,7 @@ The steps print `{"nxrt_progress":1,...}` lines and one `{"nxrt_setup":1,...}` r
 | `src-tauri/src/commands.rs` | library/run/step commands, the thread that follows a run and emits its log |
 | `src-tauri/src/api.rs` | the serialisable view of a game, gathered from its app in parallel |
 | `src-tauri/src/pads.rs` | controllers: gilrs → `pad-button` / `pad-dir` / `pad-trigger` / `pad-status` events |
+| `src-tauri/src/controls.rs` | controller defaults + per-game settings, and the `NXRT_CONTROLLER` overlay |
 | `src-tauri/src/library.rs` | the library file and its `Entry`s |
 | `src-tauri/src/runner.rs` | running a game or a step, its log and progress |
 | `src-tauri/src/manage.rs` | packages, exefs, RomFS through libnxrt_manage |

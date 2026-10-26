@@ -2,6 +2,7 @@
 //!
 //! Gathering is process work (`--describe`, `--status`, counting a RomFS), so it runs once per refresh, one thread per
 //! game, and the result is a plain serialisable view. Nothing here holds a lock or a Tauri type.
+use crate::controls::Controls;
 use crate::library::Entry;
 use crate::manage;
 use crate::runner;
@@ -116,6 +117,7 @@ pub struct Game {
     pub next: Option<Next>,
     pub load_error: Option<String>,
     pub build_mismatch: bool,
+    pub controls: Controls,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -130,6 +132,7 @@ pub struct Snapshot {
     pub version: String,
     pub running: usize,
     pub message: Option<String>,
+    pub controls: Controls,
 }
 
 /// A game's app and files, as its runner answers.
@@ -279,6 +282,7 @@ pub fn view(index: usize, e: &Entry, g: &Gathered, lib_keys: Option<&Path>, runn
         next,
         load_error,
         build_mismatch,
+        controls: e.controls.clone(),
     }
 }
 

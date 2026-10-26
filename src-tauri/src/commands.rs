@@ -1,5 +1,6 @@
 //! The window's side of the app: everything the web UI can ask for, plus the one thread per run that keeps it posted.
 use crate::api::{self, ExitInfo, RunInfo, Snapshot};
+use crate::controls::{self, Controls};
 use crate::library::{self, Entry, Library};
 use crate::manage;
 use crate::ops;
@@ -90,6 +91,7 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
         version: env!("CARGO_PKG_VERSION").into(),
         running: runs.len(),
         message: (!manage::abi_ok()).then(|| "libnxrt_manage: another ABI than this app's".to_string()),
+        controls: lib.controls.clone(),
     }
 }
 
@@ -395,14 +397,44 @@ pub fn forget_keys(state: State<Shared>) -> Result<Snapshot, String> {
 
 #[tauri::command]
 pub fn start_game(state: State<Shared>, app: AppHandle, key: String, mode: String) -> Result<(), String> {
-    let entry = {
+    let (entry, library_controls) = {
         let lib = state.library.lock().unwrap();
-        lib.games.iter().find(|e| api::game_key(e) == key).cloned().ok_or("No such game")?
+        let e = lib.games.iter().find(|e| api::game_key(e) == key).cloned().ok_or("No such game")?;
+        (e, lib.controls.clone())
     };
     let exe = entry.exe.clone().ok_or("This game has no nxrt app yet")?;
+    // (the game's own controls over the library's defaults; only what is set is passed)
+    let effective = library_controls.merged(&entry.controls);
+    let overlay = if effective.is_empty() {
+        None
+    } else {
+        let path = controls::overlay_path(&key);
+        effective.write_overlay(&path)?;
+        Some(path)
+    };
     let id = runner::describe(&exe).map(|d| d.id).unwrap_or_else(|_| "game".into());
-    let run = runner::Run::game(&exe, entry.data_root.as_deref(), mode == "play", log_file(&id, ""), || {})?;
+    let run = runner::Run::game(&exe, entry.data_root.as_deref(), mode == "play", log_file(&id, ""), || {}, overlay.as_deref())?;
     start(&state, &app, &key, run, String::new())
+}
+
+/// Save the controller defaults (`scope = "defaults"`) or one game's overrides (`scope = "game"`, its key).
+#[tauri::command]
+pub fn save_controls(state: State<Shared>, scope: String, key: Option<String>, controls: Controls) -> Result<Snapshot, String> {
+    controls.validate()?;
+    {
+        let mut lib = state.library.lock().unwrap();
+        match scope.as_str() {
+            "defaults" => lib.controls = controls,
+            "game" => {
+                let k = key.ok_or("No game given")?;
+                let g = lib.games.iter_mut().find(|e| api::game_key(e) == k).ok_or("No such game")?;
+                g.controls = controls;
+            }
+            other => return Err(format!("Unknown controls scope: {other}")),
+        }
+        lib.save()?;
+    }
+    Ok(snapshot(&state))
 }
 
 #[tauri::command]

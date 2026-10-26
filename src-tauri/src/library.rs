@@ -2,6 +2,7 @@
 //! from it), the nxrt app that runs it (its runner: fe3hrecomp, eowrecomp ...), or both. Kept in
 //! <config>/nxrt-frontend/library.toml (macOS: ~/Library/Application Support/nxrt-frontend), the games' icons beside
 //! it in icons/.
+use crate::controls::Controls;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -47,6 +48,10 @@ pub struct Entry {
     pub build_dir: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_cmd: Option<String>,
+
+    /// controller settings for this game, layered over the library's defaults (controls.rs)
+    #[serde(default, skip_serializing_if = "Controls::is_empty")]
+    pub controls: Controls,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -54,6 +59,9 @@ pub struct Library {
     /// the player's keys file (prod.keys) the toolbar chose: used before one beside a package or in ~/.switch
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keys: Option<PathBuf>,
+    /// controller defaults passed to every game (a game's own controls override them)
+    #[serde(default, skip_serializing_if = "Controls::is_empty")]
+    pub controls: Controls,
     #[serde(default, rename = "game")]
     pub games: Vec<Entry>,
 }
@@ -100,5 +108,43 @@ impl Library {
         }
         self.games.push(Entry { exe: Some(exe.to_path_buf()), data_root, ..Default::default() });
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn controls_round_trip_in_the_library_file() {
+        let controls = Controls {
+            prompts: Some("nintendo".into()),
+            bind_pad: [("a".to_string(), "south".to_string())].into_iter().collect(),
+            ..Default::default()
+        };
+        let game_controls = Controls { dpad_move: Some(false), ..Default::default() };
+        let lib = Library {
+            keys: None,
+            controls: controls.clone(),
+            games: vec![Entry {
+                exe: Some(PathBuf::from("/tmp/nxrt-test-app")),
+                controls: game_controls.clone(),
+                ..Default::default()
+            }],
+        };
+        let text = toml::to_string_pretty(&lib).unwrap();
+        assert!(text.contains("[controls]"), "{text}");
+        assert!(text.contains("[game.controls]"), "{text}");
+        let back: Library = toml::from_str(&text).unwrap();
+        assert_eq!(back.controls, controls);
+        assert_eq!(back.games[0].controls, game_controls);
+        assert_eq!(back.games[0].exe.as_deref(), Some(Path::new("/tmp/nxrt-test-app")));
+    }
+
+    #[test]
+    fn an_old_library_has_no_controls() {
+        let lib: Library = toml::from_str("[[game]]\nexe = \"/tmp/x\"\n").unwrap();
+        assert!(lib.controls.is_empty());
+        assert!(lib.games[0].controls.is_empty());
     }
 }

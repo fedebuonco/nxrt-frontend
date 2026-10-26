@@ -4,6 +4,7 @@
 mod api;
 mod cli;
 mod commands;
+mod controls;
 mod library;
 mod manage;
 mod ops;
@@ -64,6 +65,7 @@ fn main() {
             commands::logs,
             commands::config_dir,
             commands::pad_status,
+            commands::save_controls,
         ])
         .run(tauri::generate_context!())
         .expect("error while running nxrt-frontend");

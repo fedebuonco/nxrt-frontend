@@ -95,6 +95,95 @@
     logs: 'A log of every run and step the manager started: what to send when something goes wrong.',
   };
 
+  // ---- controller settings passed to games --------------------------------------------------------
+
+  const CTRL_INPUTS = [
+    ['a', 'A'], ['b', 'B'], ['x', 'X'], ['y', 'Y'],
+    ['l', 'L'], ['r', 'R'], ['zl', 'ZL'], ['zr', 'ZR'],
+    ['plus', 'Plus'], ['minus', 'Minus'],
+    ['lstick', 'Left stick press'], ['rstick', 'Right stick press'],
+    ['left', 'D-pad Left'], ['up', 'D-pad Up'], ['right', 'D-pad Right'], ['down', 'D-pad Down'],
+  ];
+  const CTRL_BUTTONS = [
+    ['south', 'South (bottom)'], ['east', 'East (right)'], ['west', 'West (left)'], ['north', 'North (top)'],
+    ['lshoulder', 'L1 / L'], ['rshoulder', 'R1 / R'], ['ltrigger', 'L2 / ZL'], ['rtrigger', 'R2 / ZR'],
+    ['back', 'Back / Minus'], ['start', 'Start / Plus'], ['guide', 'Guide'],
+    ['lstick', 'L stick press'], ['rstick', 'R stick press'],
+    ['dpad_up', 'D-pad Up'], ['dpad_down', 'D-pad Down'], ['dpad_left', 'D-pad Left'], ['dpad_right', 'D-pad Right'],
+    ['touchpad', 'Touchpad'], ['misc1', 'Misc 1'], ['rpaddle1', 'Paddle 1'], ['lpaddle1', 'Paddle 3'],
+    ['rpaddle2', 'Paddle 2'], ['lpaddle2', 'Paddle 4'],
+    ['misc2', 'Misc 2'], ['misc3', 'Misc 3'], ['misc4', 'Misc 4'], ['misc5', 'Misc 5'], ['misc6', 'Misc 6'],
+  ];
+  const CTRL_PROMPTS = [['auto', 'Auto'], ['nintendo', 'Nintendo'], ['xbox', 'Xbox'], ['playstation', 'PlayStation'], ['keyboard', 'Keyboard']];
+
+  const ctrlBool = (v) => (v === true ? '1' : v === false ? '0' : '');
+  const ctrlButtonLabel = (v) => (CTRL_BUTTONS.find(([x]) => x === v) || ['', v || ''])[1];
+  const ctrlPromptLabel = (v) => (CTRL_PROMPTS.find(([x]) => x === v) || ['', v || ''])[1];
+  function ctrlCount(c) {
+    if (!c) return 0;
+    return (c.prompts ? 1 : 0) + (c.dpad_move != null ? 1 : 0) + (c.rumble != null ? 1 : 0) +
+      (c.rumble_strength != null ? 1 : 0) + (c.led != null ? 1 : 0) + Object.keys(c.bind_pad || {}).length;
+  }
+  function ctrlInherit(scope, has, label) {
+    if (scope === 'defaults') return "Game's own";
+    return has ? `Use defaults (${label})` : 'Use defaults';
+  }
+  function ctrlSelect(name, options, value, inherit) {
+    const opts = [`<option value="">${esc(inherit)}</option>`];
+    for (const [v, label] of options) opts.push(`<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(label)}</option>`);
+    return `<select data-c="${esc(name)}">${opts.join('')}</select>`;
+  }
+  function ctrlForm(scope, c, global, key) {
+    c = c || {}; global = global || {};
+    const gp = global.bind_pad || {}, bp = c.bind_pad || {};
+    const inheritBool = (name) => ctrlInherit(scope, global[name] != null, global[name] ? 'On' : 'Off');
+    const strength = [['0', '0%']];
+    for (let i = 5; i <= 100; i += 5) strength.push([String(i), `${i}%`]);
+    const prefs = [
+      ['Button prompts', 'prompts', CTRL_PROMPTS, c.prompts || '', ctrlInherit(scope, !!global.prompts, ctrlPromptLabel(global.prompts))],
+      ['D-pad moves the stick', 'dpad_move', [['1', 'On'], ['0', 'Off']], ctrlBool(c.dpad_move), inheritBool('dpad_move')],
+      ['Rumble', 'rumble', [['1', 'On'], ['0', 'Off']], ctrlBool(c.rumble), inheritBool('rumble')],
+      ['Rumble strength', 'rumble_strength', strength, c.rumble_strength != null ? String(c.rumble_strength) : '', ctrlInherit(scope, global.rumble_strength != null, global.rumble_strength != null ? `${global.rumble_strength}%` : '')],
+      ['Controller light', 'led', [['1', 'On'], ['0', 'Off']], ctrlBool(c.led), inheritBool('led')],
+    ].map(([label, name, options, value, inherit]) =>
+      `<label class="ctl-row"><span class="ctl-label">${esc(label)}</span>${ctrlSelect(name, options, value, inherit)}</label>`).join('');
+    const binds = CTRL_INPUTS.map(([input, label]) => {
+      const inherit = ctrlInherit(scope, !!gp[input], ctrlButtonLabel(gp[input]));
+      return `<label class="ctl-row"><span class="ctl-label">${esc(label)}</span>${ctrlSelect(`bind_pad.${input}`, CTRL_BUTTONS, bp[input] || '', inherit)}</label>`;
+    }).join('');
+    const slug = `controls-${scope}${key ? `-${key.replace(/[^a-z0-9]/gi, '-')}` : ''}`;
+    const attrs = `data-scope="${scope}"${key ? ` data-key="${esc(key)}"` : ''}`;
+    return `<div class="controls-form" ${attrs}>
+      <div class="ctl-grid">${prefs}</div>
+      <details class="disc" data-disc="${slug}-bind"${scope === 'game' ? ' open' : ''}>
+        <summary>Bindings <span class="muted small">${Object.keys(bp).length} set</span></summary>
+        <div class="ctl-grid bind-grid">${binds}</div>
+      </details>
+    </div>`;
+  }
+  function controlsDefaultsCard() {
+    return `<section class="card setting">
+      <div class="setting-head">
+        <span class="section-title">Controller defaults</span><span class="spacer"></span>
+        <button class="btn ghost sm" data-act="controls-reset-defaults">Reset</button>
+      </div>
+      <p>Passed to every game when it starts: a row set here wins over the game's own setting, and a game's Controls can override it. Left on “Game's own”, the game keeps what it has. With a controller, focus a row and use ← → (or A) to change it.</p>
+      ${ctrlForm('defaults', S.snap.controls, {})}
+    </section>`;
+  }
+  function controlsCard(g) {
+    const n = ctrlCount(g.controls);
+    const note = n ? tag(`${n} set`, '') : `<span class="muted small">${ctrlCount(S.snap.controls) ? 'using defaults' : "the game's own"}</span>`;
+    return `<details class="disc" data-disc="controls-${esc(g.key)}">
+      <summary>Controls ${note}</summary>
+      <div class="disc-body">
+        <p class="hint">These rows override the manager's defaults for this game only; “Use defaults” inherits them. A row the game itself sets and the manager does not is left alone. With a controller, focus a row and use ← → (or A) to change it.</p>
+        ${ctrlForm('game', g.controls, S.snap.controls, g.key)}
+        <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="controls-reset-game" data-key="${esc(g.key)}">Reset this game</button></div>
+      </div>
+    </details>`;
+  }
+
   // ---- bits -----------------------------------------------------------------------------------------------------
 
   const toneClass = (t) => `tone-${t || 'muted'}`;
@@ -263,6 +352,7 @@
           : ''
       }
       ${solo ? noApp(g) : setup(g)}
+      ${solo ? '' : controlsCard(g)}
       ${
         solo
           ? `<div class="cols" style="grid-template-columns:1fr">${logCard(g)}</div>`
@@ -551,7 +641,7 @@
         </section>
         <section class="card setting">
           <div class="setting-head">
-            <span class="section-title">Controller</span>
+            <span class="section-title">Controller (this window)</span>
             ${S.pad.connected ? pill(S.pad.name || 'connected', 'ok') : pill(S.pad.error ? 'not available' : 'none connected', S.pad.error ? 'error' : 'muted')}
             <span class="spacer"></span>
             <button class="btn secondary" data-act="pad-help">Controls…</button>
@@ -561,6 +651,7 @@
           <p class="small">If a connected controller isn't seen, allow Input Monitoring for nxrt in System Settings › Privacy &amp; Security.</p>
           ${padHelpGrid()}
         </section>
+        ${controlsDefaultsCard()}
         <section class="card setting">
           <div class="setting-head"><span class="section-title">New recomps</span></div>
           <p>Where Create a recomp puts them, and the nxrt checkout they build against (each can be changed when creating).</p>
@@ -1014,6 +1105,43 @@
     document.querySelectorAll('.menu-pop').forEach((p) => (p.hidden = true));
   }
 
+  function collectControls(form) {
+    const controls = {};
+    for (const el of form.querySelectorAll('select[data-c]')) {
+      if (!el.value) continue;
+      const name = el.dataset.c;
+      if (name.startsWith('bind_pad.')) (controls.bind_pad = controls.bind_pad || {})[name.slice(9)] = el.value;
+      else if (name === 'prompts') controls.prompts = el.value;
+      else if (name === 'rumble_strength') controls.rumble_strength = Number(el.value);
+      else controls[name] = el.value === '1';
+    }
+    return controls;
+  }
+
+  async function saveControls(form) {
+    if (!form) return;
+    try {
+      S.snap = await invoke('save_controls', {
+        scope: form.dataset.scope,
+        key: form.dataset.key || null,
+        controls: collectControls(form),
+      });
+    } catch (e) {
+      toast(errText(e), 'error');
+      load(true);
+    }
+  }
+
+  async function resetControls(scope, key) {
+    try {
+      S.snap = await invoke('save_controls', { scope, key: key || null, controls: {} });
+      render();
+      toast(scope === 'defaults' ? 'Controller defaults cleared' : 'This game follows the defaults again');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
   async function doAct(act, el) {
     const g = game();
     closeMenus();
@@ -1067,6 +1195,10 @@
         return invoke('open_logs');
       case 'pad-help':
         return helpSheet();
+      case 'controls-reset-defaults':
+        return resetControls('defaults');
+      case 'controls-reset-game':
+        return resetControls('game', el.dataset.key);
       case 'keys-change':
         return changeKeys();
       case 'keys-forget':
@@ -1114,7 +1246,7 @@
 
   // ---- controllers & focus --------------------------------------------------------------------------------------
 
-  const FOCUS_SEL = 'button, [tabindex="0"], summary, input, a[href]';
+  const FOCUS_SEL = 'button, [tabindex="0"], summary, input, select, a[href]';
   const cssq = (v) => (window.CSS && CSS.escape ? CSS.escape(String(v)) : String(v).replace(/["\\]/g, '\\$&'));
 
   function selOf(el) {
@@ -1223,6 +1355,13 @@
     if (best) setFocus(best);
   }
 
+  function adjustSelect(el, delta) {
+    if (!el || el.tagName !== 'SELECT' || !el.options.length) return false;
+    el.selectedIndex = (el.selectedIndex + delta + el.options.length) % el.options.length;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
   function activateFocused() {
     padWake();
     const el = document.activeElement;
@@ -1231,6 +1370,10 @@
       return;
     }
     if (el.tagName === 'INPUT') return;
+    if (el.tagName === 'SELECT') {
+      adjustSelect(el, 1);  // (a pad cannot steer a native popup)
+      return;
+    }
     el.click();
   }
 
@@ -1431,6 +1574,11 @@
     if (!document.hasFocus()) return;
     padWake();
     if (dir) {
+      const sel = document.activeElement;
+      if (sel && sel.tagName === 'SELECT' && (dir === 'left' || dir === 'right')) {
+        adjustSelect(sel, dir === 'right' ? 1 : -1);
+        return;
+      }
       if (repeatDir === dir) return;
       moveFocus(dir);
       startRepeat(dir);
@@ -1497,6 +1645,11 @@
       }
       const card = e.target.closest('[data-card]');
       if (card) go('game', card.dataset.card);
+    });
+
+    document.addEventListener('change', (e) => {
+      const sel = e.target.closest('select[data-c]');
+      if (sel) saveControls(sel.closest('.controls-form'));
     });
 
     document.addEventListener('keydown', (e) => {
@@ -1573,7 +1726,7 @@
         if (e.key === 'Escape') closeSheet();
         return;
       }
-      if (e.target.matches('input, textarea')) return;
+      if (e.target.matches('input, textarea, select')) return;  // (let a native select take its arrows and Enter)
       const dirs = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
       if (dirs[e.key]) {
         e.preventDefault();

@@ -539,3 +539,24 @@ body.pad-on .page { padding-bottom: 86px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001s !important; transition-duration: .001s !important; }
 }
+
+/* controller settings passed to games */
+.controls-form { margin-top: 8px; }
+.ctl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; }
+.ctl-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ctl-label { flex: 0 0 126px; font-size: 11px; color: var(--sub); }
+.ctl-row select {
+  flex: 1; min-width: 0; height: 27px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--well); color: var(--text); font: inherit; font-size: 11px;
+}
+.ctl-row select:hover { border-color: var(--line-hi); }
+.ctl-row select:focus, .ctl-row select.pad-focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(95, 212, 198, .18);
+}
+.bind-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.controls-form > .disc { margin-top: 12px; }
+.controls-form > .disc > .ctl-grid { padding: 2px 12px 12px; }
+@media (max-width: 820px) {
+  .ctl-grid, .bind-grid { grid-template-columns: 1fr; }
+  .ctl-label { flex-basis: 110px; }
+}
