@@ -1840,7 +1840,7 @@ body.pad-on .page {
     background 0.09s ease,
     border-color 0.09s ease;
 }
-.pad-chip {
+.pmap-chip {
   flex: none;
   min-width: 26px;
   height: 24px;
@@ -1859,7 +1859,7 @@ body.pad-on .page {
     background 0.09s ease,
     color 0.09s ease;
 }
-.pad-name {
+.pmap-name {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
@@ -1881,11 +1881,11 @@ body.pad-on .page {
   border-color: var(--accent);
   background: rgba(95, 212, 198, 0.12);
 }
-.pad-host.on .pad-chip {
+.pad-host.on .pmap-chip {
   background: var(--accent);
   color: var(--on-accent);
 }
-.pad-host.on .pad-name,
+.pad-host.on .pmap-name,
 .pad-host.on .pad-map {
   color: var(--accent);
 }

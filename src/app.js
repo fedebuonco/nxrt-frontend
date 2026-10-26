@@ -820,8 +820,8 @@ import { ICONS } from './js/icons.js';
     const row = (host, glyph, name) => {
       const m = mapped(host);
       return `<li class="pad-host${S.padHeld.has(host) ? ' on' : ''}" data-host="${host}" title="${esc(hostName(host))}">
-          <span class="pad-chip">${esc(glyph)}</span>
-          <span class="pad-name">${esc(name)}</span>
+          <span class="pmap-chip">${esc(glyph)}</span>
+          <span class="pmap-name">${esc(name)}</span>
           <span class="pad-map${m ? '' : ' none'}" data-map="${host}">${esc(m || 'not bound')}</span>
         </li>`;
     };
