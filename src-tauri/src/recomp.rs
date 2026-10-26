@@ -12,7 +12,8 @@ const MODULE_ALIGN: u64 = 0x200_0000;  // (32 MiB, as the ports lay them out)
 
 /// The nxrt checkout new recomps build against: NXRT_DIR at build time, else this app's own nxrt submodule.
 pub fn default_nxrt() -> PathBuf {
-    PathBuf::from(option_env!("NXRT_DIR").unwrap_or(concat!(env!("CARGO_MANIFEST_DIR"), "/nxrt")))
+    let p = PathBuf::from(option_env!("NXRT_DIR").unwrap_or(concat!(env!("CARGO_MANIFEST_DIR"), "/../nxrt")));
+    p.canonicalize().unwrap_or(p)
 }
 
 pub fn default_dir(id: &str) -> PathBuf {

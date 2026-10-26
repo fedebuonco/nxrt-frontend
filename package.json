@@ -1,0 +1,14 @@
+{
+  "name": "nxrt-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A manager for the nxrt Switch recomps: one library of games, their files and game code, Play",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

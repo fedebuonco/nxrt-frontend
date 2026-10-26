@@ -2,7 +2,10 @@
 use std::path::PathBuf;
 
 fn main() {
-    let nxrt = std::env::var_os("NXRT_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("nxrt"));
+    tauri_build::build();
+
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let nxrt = std::env::var_os("NXRT_DIR").map(PathBuf::from).unwrap_or_else(|| root.join("../nxrt"));
     let src = [
         nxrt.join("manage/nxrt_manage.c"),
         nxrt.join("runtime/nxpkg.c"),
@@ -20,7 +23,7 @@ fn main() {
         .include(nxrt.join("runtime"))
         .flag_if_supported("-std=c11")
         .flag_if_supported("-Wno-unused-parameter")
-        .flag_if_supported("-mmacosx-version-min=11.0")  // (as the Rust code links: no newer-than-target warnings)
+        .flag_if_supported("-mmacosx-version-min=11.0")
         .opt_level(2)
         .compile("nxrt_manage");
 }
