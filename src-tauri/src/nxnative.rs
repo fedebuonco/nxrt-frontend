@@ -118,6 +118,8 @@ pub fn probe(e: &Entry, repo: &Path) -> Probe {
 }
 
 /// The message the script prints before the command that runs the game (build_ipa_from_nsp.py, a Mac-only build).
+pub const RUN_COMMAND_FOLLOWS: &str = "done: the game runs on the Mac with this command";
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -128,5 +130,3 @@ mod tests {
         }
     }
 }
-
-pub const RUN_COMMAND_FOLLOWS: &str = "done: the game runs on the Mac with this command";
