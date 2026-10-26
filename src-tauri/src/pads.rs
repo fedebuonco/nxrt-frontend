@@ -30,12 +30,18 @@ pub fn start(app: AppHandle, shared: Shared) {
         let mut gilrs = match Gilrs::new() {
             Ok(g) => g,
             Err(e) => {
-                eprintln!("gamepads: {e}");
+                tracing::error!(target: "pads", error = %e, "gamepads could not start");
                 publish(&app, &shared, PadStatus { connected: false, name: None, error: Some(format!("{e}")) });
                 return;
             }
         };
-        publish(&app, &shared, status(&gilrs));
+        let first = status(&gilrs);
+        if first.connected {
+            tracing::info!(target: "pads", name = ?first.name, "controller connected at start");
+        } else {
+            tracing::info!(target: "pads", "no controller at start");
+        }
+        publish(&app, &shared, first);
         let mut last_dir = String::new();
         let (mut lx, mut ly) = (0.0f32, 0.0f32);
         let (mut lt, mut rt) = (false, false);
@@ -82,7 +88,13 @@ pub fn start(app: AppHandle, shared: Shared) {
                     last_dir.clear();
                     lx = 0.0;
                     ly = 0.0;
-                    publish(&app, &shared, status(&gilrs));
+                    let first = status(&gilrs);
+        if first.connected {
+            tracing::info!(target: "pads", name = ?first.name, "controller connected at start");
+        } else {
+            tracing::info!(target: "pads", "no controller at start");
+        }
+        publish(&app, &shared, first);
                 }
                 _ => {}
             }

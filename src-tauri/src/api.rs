@@ -133,6 +133,15 @@ pub struct Snapshot {
     pub running: usize,
     pub message: Option<String>,
     pub controls: Controls,
+    pub log: LogInfo,
+}
+
+/// Where the manager's own log lives and the filter it was started with (docs/LOGGING.md).
+#[derive(Serialize, Clone, Default)]
+pub struct LogInfo {
+    pub dir: String,
+    pub path: Option<String>,
+    pub filter: String,
 }
 
 /// A game's app and files, as its runner answers.
@@ -148,7 +157,13 @@ impl Gathered {
     pub fn gather(e: &Entry) -> Gathered {
         let Some(exe) = &e.exe else { return Gathered::default() };
         let describe = Some(runner::describe(exe));
+        if let Some(Err(err)) = &describe {
+            tracing::warn!(target: "api", exe = %exe.display(), error = %err, "describe failed");
+        }
         let status = Some(runner::status(exe, e.data_root.as_deref()));
+        if let Some(Err(err)) = &status {
+            tracing::warn!(target: "api", exe = %exe.display(), error = %err, "status failed");
+        }
         let dir = status.as_ref().and_then(|s| s.as_ref().ok()).map(game_dir);
         let files = dir.as_deref().and_then(manage::game_files);
         let romfs = dir.as_deref().filter(|_| files.as_ref().is_some_and(|f| f.exefs)).map(manage::romfs_summary);

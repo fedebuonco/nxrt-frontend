@@ -2,6 +2,7 @@
 use crate::api::{self, ExitInfo, RunInfo, Snapshot};
 use crate::controls::{self, Controls};
 use crate::issues;
+use crate::logging;
 use crate::library::{self, Entry, Library};
 use crate::manage;
 use crate::ops;
@@ -71,6 +72,7 @@ struct RunFinished {
 // ---- what the window reads ---------------------------------------------------------------------------------------
 
 pub fn snapshot(sh: &Shared) -> Snapshot {
+    let t0 = std::time::Instant::now();
     let lib = sh.library.lock().unwrap().clone();
     let infos = api::gather_all(&lib.games);
     let runs = sh.runs.lock().unwrap();
@@ -81,8 +83,9 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
         let running = runs.get(&key).map(run_info);
         games.push(api::view(i, e, &infos[i], lib.keys.as_deref(), running, last.get(&key).cloned()));
     }
-    Snapshot {
+    let snap = Snapshot {
         games,
+        log: logging::info(),
         keys: lib.keys.as_ref().map(|k| k.display().to_string()),
         keys_ok: lib.keys.as_ref().is_some_and(|k| k.is_file()),
         keys_home: dirs::home_dir().map(|h| h.join(".switch/prod.keys")).filter(|p| p.is_file()).map(|p| p.display().to_string()),
@@ -93,7 +96,9 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
         running: runs.len(),
         message: (!manage::abi_ok()).then(|| "libnxrt_manage: another ABI than this app's".to_string()),
         controls: lib.controls.clone(),
-    }
+    };
+    tracing::debug!(target: "api", games = snap.games.len(), ms = t0.elapsed().as_millis(), "snapshot");
+    snap
 }
 
 fn run_info(h: &RunHandle) -> RunInfo {
@@ -148,6 +153,11 @@ fn start(sh: &Shared, app: &AppHandle, key: &str, run: runner::Run, code_id: Str
         runs.insert(key.to_string(), handle.clone());
     }
     sh.last.lock().unwrap().remove(key);
+    let (run_id, log_path) = {
+        let r = handle.run.lock().unwrap();
+        (r.run_id.clone(), r.log_file.clone())
+    };
+    tracing::info!(target: "run", run = %run_id, key = %key, kind = %kind_label(kind), log = ?log_path, "run started");
     let (sh, app, key) = (sh.clone(), app.clone(), key.to_string());
     let _ = app.emit("library-changed", ());
     std::thread::spawn(move || monitor(sh, app, key, kind, code_id, handle));
@@ -155,6 +165,8 @@ fn start(sh: &Shared, app: &AppHandle, key: &str, run: runner::Run, code_id: Str
 }
 
 fn monitor(sh: Shared, app: AppHandle, key: String, kind: Kind, code_id: String, handle: RunHandle) {
+    let run_id = { handle.run.lock().unwrap().run_id.clone() };
+    let mut last_step = String::new();
     let mut sig: Option<(String, Option<f32>, usize, String)> = None;
     loop {
         let (done, info) = {
@@ -173,6 +185,10 @@ fn monitor(sh: Shared, app: AppHandle, key: String, kind: Kind, code_id: String,
             break;
         }
         let (k, progress, step, log, last_line) = info;
+        if step != last_step && !step.is_empty() {
+            tracing::debug!(target: "run", run = %run_id, key = %key, step = %step, "progress");
+            last_step = step.clone();
+        }
         let s = (step.clone(), progress, log.len(), last_line);
         if sig.as_ref() != Some(&s) {
             sig = Some(s);
@@ -240,6 +256,15 @@ fn finish(sh: &Shared, key: &str, kind: Kind, code_id: String, handle: &RunHandl
     }
     sh.last.lock().unwrap().insert(key.to_string(), exit.clone());
     sh.runs.lock().unwrap().remove(key);
+    let (run_id, log_path) = {
+        let r = handle.run.lock().unwrap();
+        (r.run_id.clone(), r.log_file.clone())
+    };
+    if exit.ok {
+        tracing::info!(target: "run", run = %run_id, key = %key, log = ?log_path, text = %exit.text, "run finished");
+    } else {
+        tracing::error!(target: "run", run = %run_id, key = %key, log = ?log_path, text = %exit.text, "run failed");
+    }
     exit
 }
 
@@ -365,6 +390,7 @@ pub async fn choose_app(state: State<'_, Shared>, index: usize, path: String) ->
 #[tauri::command]
 pub async fn remove(state: State<'_, Shared>, index: usize) -> Result<Snapshot, String> {
     let sh = state.inner().clone();
+    tracing::info!(target: "library", index, "removing a game from the library");
     {
         let mut lib = sh.library.lock().unwrap();
         if index >= lib.games.len() {
@@ -382,6 +408,7 @@ pub async fn remove(state: State<'_, Shared>, index: usize) -> Result<Snapshot, 
 
 #[tauri::command]
 pub fn set_keys(state: State<Shared>, path: String) -> Result<Snapshot, String> {
+    tracing::info!(target: "settings", path = %path, "keys chosen");
     let p = PathBuf::from(path);
     library::check_keys(&p)?;
     state.library.lock().unwrap().keys = Some(p);
@@ -391,6 +418,7 @@ pub fn set_keys(state: State<Shared>, path: String) -> Result<Snapshot, String> 
 
 #[tauri::command]
 pub fn forget_keys(state: State<Shared>) -> Result<Snapshot, String> {
+    tracing::info!(target: "settings", "keys forgotten");
     state.library.lock().unwrap().keys = None;
     state.library.lock().unwrap().save()?;
     Ok(snapshot(&state))
@@ -398,6 +426,7 @@ pub fn forget_keys(state: State<Shared>) -> Result<Snapshot, String> {
 
 #[tauri::command]
 pub fn start_game(state: State<Shared>, app: AppHandle, key: String, mode: String) -> Result<(), String> {
+    tracing::info!(target: "run", key = %key, mode = %mode, "game start requested");
     let (entry, library_controls) = {
         let lib = state.library.lock().unwrap();
         let e = lib.games.iter().find(|e| api::game_key(e) == key).cloned().ok_or("No such game")?;
@@ -421,6 +450,7 @@ pub fn start_game(state: State<Shared>, app: AppHandle, key: String, mode: Strin
 /// Opens the nxrt GitHub new-issue form with this game, its build, its latest log and the environment filled in.
 #[tauri::command]
 pub fn open_issue(state: State<Shared>, key: String) -> Result<(), String> {
+    tracing::info!(target: "issues", key = %key, "opening the nxrt issue form");
     let (index, entry) = {
         let lib = state.library.lock().unwrap();
         let (index, e) = lib.games.iter().enumerate().find(|(_, e)| api::game_key(e) == key).ok_or("No such game")?;
@@ -450,11 +480,13 @@ pub fn save_controls(state: State<Shared>, scope: String, key: Option<String>, c
         }
         lib.save()?;
     }
+    tracing::debug!(target: "settings", scope = %scope, "controls saved");
     Ok(snapshot(&state))
 }
 
 #[tauri::command]
 pub fn start_step(state: State<Shared>, app: AppHandle, key: String, stage: String, src: Option<String>) -> Result<(), String> {
+    tracing::info!(target: "run", key = %key, stage = %stage, "step start requested");
     let (entry, keys) = {
         let lib = state.library.lock().unwrap();
         let e = lib.games.iter().find(|e| api::game_key(e) == key).cloned().ok_or("No such game")?;
@@ -486,6 +518,7 @@ pub fn start_step(state: State<Shared>, app: AppHandle, key: String, stage: Stri
 
 #[tauri::command]
 pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<(), String> {
+    tracing::info!(target: "run", key = %key, "dev build requested");
     let entry = {
         let lib = state.library.lock().unwrap();
         lib.games.iter().find(|e| api::game_key(e) == key).cloned().ok_or("No such game")?
@@ -507,6 +540,7 @@ pub fn stop(state: State<Shared>, key: String) {
 
 #[tauri::command]
 pub async fn create_recomp(state: State<'_, Shared>, app: AppHandle, index: usize, id: String, dir: String) -> Result<(), String> {
+    tracing::info!(target: "recomp", id = %id, dir = %dir, "creating a recomp");
     let sh = state.inner().clone();
     let (entry, keys) = {
         let lib = sh.library.lock().unwrap();
@@ -552,6 +586,18 @@ pub fn save_dev(state: State<Shared>, index: usize, dir: String, cmd: String) ->
     Ok(snapshot(&state))
 }
 
+/// The manager's own log tail, for the Logs view (docs/LOGGING.md).
+#[tauri::command]
+pub fn manager_log(lines: Option<usize>) -> logging::ManagerLog {
+    logging::manager_log(lines.unwrap_or(200).clamp(20, 2000))
+}
+
+/// A webview script error (window error / unhandledrejection listeners).
+#[tauri::command]
+pub fn log_ui(level: String, message: String, source: Option<String>, stack: Option<String>) {
+    logging::ui(&level, &message, source.as_deref(), stack.as_deref());
+}
+
 #[tauri::command]
 pub fn open_logs() {
     let dir = library::dir().join("logs");
@@ -575,6 +621,8 @@ pub struct LogRow {
     pub path: String,
     pub bytes: u64,
     pub mtime: u64,
+    /// manager or run (the manager's own daily log vs a run's log)
+    pub kind: String,
 }
 
 #[tauri::command]
@@ -586,8 +634,10 @@ pub fn logs() -> Vec<LogRow> {
                 .filter_map(|e| {
                     let m = e.metadata().ok()?;
                     let mtime = m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+                    let name = e.file_name().to_string_lossy().into_owned();
                     Some(LogRow {
-                        name: e.file_name().to_string_lossy().into_owned(),
+                        kind: if name.starts_with("manager.log") { "manager".into() } else { "run".into() },
+                        name,
                         path: e.path().display().to_string(),
                         bytes: m.len(),
                         mtime,

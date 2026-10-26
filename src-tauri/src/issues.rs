@@ -16,6 +16,7 @@ pub struct Env {
     pub manager: String,
     pub macos: String,
     pub arch: String,
+    pub manager_log: Option<String>,
 }
 
 impl Env {
@@ -40,6 +41,7 @@ impl Env {
             manager: env!("CARGO_PKG_VERSION").into(),
             macos,
             arch: if std::env::consts::ARCH == "aarch64" { "arm64".into() } else { std::env::consts::ARCH.into() },
+            manager_log: crate::logging::manager_log_path().map(|p| p.display().to_string()),
         }
     }
 }
@@ -131,6 +133,9 @@ fn body(g: &Game, env: &Env, log: Option<(&Path, &str)>) -> String {
     s.push_str(&format!("- nxrt: `{}` (`{}`)\n", env.nxrt_rev, env.nxrt_dir));
     s.push_str(&format!("- nxrt-frontend: `{}`\n", env.manager));
     s.push_str(&format!("- macOS: `{}` ({})\n", env.macos, env.arch));
+    if let Some(m) = &env.manager_log {
+        s.push_str(&format!("- manager log: `{m}`\n"));
+    }
     s.push_str("\n<!-- Opened from nxrt-frontend. Please review the paths and the log before submitting. -->\n");
     if s.chars().count() > MAX_BODY {
         s = s.chars().take(MAX_BODY).collect();
@@ -247,6 +252,7 @@ mod tests {
             manager: "0.1.0".into(),
             macos: "15.0".into(),
             arch: "arm64".into(),
+            manager_log: None,
         }
     }
 

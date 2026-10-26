@@ -72,6 +72,7 @@ pub fn add_package_to(games: &mut Vec<Entry>, package: &Path, keys: &Path) -> Re
 /// A new recomp for a game added from its package (recomp.rs): its game files set up from the package into
 /// <dir>/data/extracted, its folder written. Its app is built next by the caller.
 pub fn create_recomp(e: &Entry, id: &str, dir: &Path, nxrt: &Path, keys: &Path) -> Result<(), String> {
+    tracing::info!(target: "recomp", id = %id, dir = %dir.display(), "recomp: reading the package");
     if !recomp::valid_id(id) {
         return Err("The id is a short name in lower-case letters and digits (it names the app: <id>recomp)".into());
     }

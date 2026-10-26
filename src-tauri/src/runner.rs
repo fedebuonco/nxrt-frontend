@@ -152,6 +152,8 @@ pub struct Run {
     pub progress: Arc<Mutex<Progress>>,
     /// where the whole log is also written
     pub log_file: Option<PathBuf>,
+    /// the manager's id for this run; nxrt gets the same id as NXRT_RUN_ID
+    pub run_id: String,
 }
 
 impl Run {
@@ -205,6 +207,13 @@ impl Run {
     }
 
     fn spawn(mut c: Command, what: &Path, kind: Kind, log_file: Option<PathBuf>, repaint: impl Fn() + Send + Sync + 'static) -> Result<Run, String> {
+        let run_id = crate::logging::new_run_id();
+        c.env("NXRT_RUN_ID", &run_id);
+        // (a verbose manager session, NXRT_GAME_LOG=debug, is a verbose nxrt session; its default is info)
+        if let Ok(level) = std::env::var("NXRT_GAME_LOG") {
+            c.env("NXRT_LOG", level);
+        }
+        tracing::debug!(target: "run", run = %run_id, exe = %what.display(), kind = ?kind, "spawning");
         if kind != Kind::DevBuild && kind != Kind::Create {
             if let Some(dir) = what.parent() {
                 c.current_dir(dir);
@@ -215,7 +224,10 @@ impl Run {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("can't start {}: {e}", what.display()))?;
+            .map_err(|e| {
+                tracing::error!(target: "run", run = %run_id, exe = %what.display(), error = %e, "cannot spawn");
+                format!("can't start {}: {e}", what.display())
+            })?;
         let log: Log = Arc::new(Mutex::new(VecDeque::new()));
         let progress: Arc<Mutex<Progress>> = Default::default();
         let file = log_file.as_ref().and_then(|p| std::fs::File::create(p).ok()).map(|f| Arc::new(Mutex::new(f)));
@@ -256,7 +268,7 @@ impl Run {
                 }
             });
         }
-        Ok(Run { child, kind, log, progress, log_file })
+        Ok(Run { child, kind, log, progress, log_file, run_id })
     }
 
     /// None while it runs, else how it ended.

@@ -115,6 +115,20 @@ effective ones (the game's start screen shows them). A row the manager does not 
 The overlay is read by the `nxrt` submodule (`input/input.c`, `input_loaded`). A game app built before that revision
 ignores `NXRT_CONTROLLER`; rebuild the app to pick it up.
 
+## Logging
+
+The manager writes its own log to `~/Library/Application Support/nxrt-frontend/logs/manager.log.YYYY-MM-DD` (daily,
+seven kept) and every run keeps its own log in the same folder. Set `NXRT_FRONTEND_LOG=debug` (or
+`run=trace,api=debug`) for more; `NXRT_GAME_LOG=debug` passes a level to the game's nxrt logging. A run id is put in
+both: the manager's `run started/finished` lines and nxrt's `[run=…]`. **Logs → Manager** shows the manager log with
+level filters and Follow; **Settings → Diagnostics** shows the level and path. See [docs/LOGGING.md](docs/LOGGING.md)
+and nxrt's [docs/LOGGING.md](nxrt/docs/LOGGING.md).
+
+```sh
+NXRT_FRONTEND_LOG=debug npm run dev
+NXRT_GAME_LOG=debug npm run dev
+```
+
 ## Where things are
 
 The library is `~/Library/Application Support/nxrt-frontend/library.toml` (`NXRT_FRONTEND_LIBRARY` overrides it), the

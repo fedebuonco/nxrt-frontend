@@ -7,6 +7,7 @@ mod commands;
 mod controls;
 mod issues;
 mod library;
+mod logging;
 mod manage;
 mod ops;
 mod pads;
@@ -16,6 +17,9 @@ mod runner;
 use tauri::Manager;
 
 fn main() {
+    logging::init();
+    tracing::info!(target: "app", version = env!("CARGO_PKG_VERSION"), config = %library::dir().display(),
+                   filter = logging::filter(), "nxrt-frontend starting");
     // (the command line first: --list, --step, --add, --create, --keys)
     if let Some(code) = cli::run() {
         std::process::exit(code);
@@ -68,6 +72,8 @@ fn main() {
             commands::pad_status,
             commands::save_controls,
             commands::open_issue,
+            commands::manager_log,
+            commands::log_ui,
         ])
         .run(tauri::generate_context!())
         .expect("error while running nxrt-frontend");

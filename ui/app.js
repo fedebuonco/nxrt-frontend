@@ -16,6 +16,12 @@
     key: null,
     logs: null,
     logsBusy: false,
+    manager: null,
+    managerBusy: false,
+    managerLevel: 'all',
+    managerSearch: '',
+    managerFollow: true,
+    managerTimer: 0,
     runs: {},
     icons: new Map(),
     disc: new Set(),
@@ -569,7 +575,9 @@
 
   function viewLogs() {
     if (S.logs === null && !S.logsBusy) loadLogs();
-    const list = S.logs || [];
+    if (S.manager === null && !S.managerBusy) loadManager();
+    if (S.manager && S.managerFollow) scheduleManager();
+    const list = (S.logs || []).filter((r) => r.kind !== 'manager');
     return `<div class="page page-enter">
       <header class="head">
         <div>
@@ -579,19 +587,90 @@
         </div>
         <div class="actions"><button class="btn secondary" data-act="open-logs-dir">Open the folder</button></div>
       </header>
+      ${managerCard()}
       <section class="card logs-card">
         ${
           S.logs === null
             ? `<div class="loading" style="min-height:220px"><span class="spinner"></span>Reading the logs…</div>`
             : list.length
-            ? `<div class="logs-head"><span class="eyebrow">File</span><span class="eyebrow">${list.length} log${list.length === 1 ? '' : 's'}</span></div>${list.map(logRow).join('')}`
+            ? `<div class="logs-head"><span class="eyebrow">Runs</span><span class="eyebrow">${list.length} log${list.length === 1 ? '' : 's'}</span></div>${list.map(logRow).join('')}`
             : `<div class="empty" style="padding:36px 0"><div class="badge-icon">${ICONS.doc}</div><h2 style="font-size:14px">No runs yet</h2><p style="margin-bottom:0;font-size:11px">Every step and every game started from here keeps its log in this folder.</p></div>`
         }
       </section>
     </div>`;
   }
 
+  const managerChip = (level) =>
+    `<button class="chip${S.managerLevel === level ? ' on' : ''}" data-act="manager-level" data-level="${level}">${level === 'all' ? 'All' : level.toUpperCase()}</button>`;
+
+  function managerCard() {
+    const m = S.manager;
+    return `<section class="card logs-card manager-card">
+      <div class="setting-head">
+        <span class="section-title">Manager</span><span id="manager-filter" class="tag">${esc((m && m.filter) || 'info')}</span>
+        <span class="spacer"></span>
+        <button class="btn ghost sm" data-act="manager-refresh">Refresh</button>
+        <button class="btn secondary" data-act="open-logs-dir">Folder</button>
+      </div>
+      <p class="hint">The manager's own log: one line per event, a daily file, seven kept. <span class="mono" id="manager-path" title="${esc((m && m.path) || '')}">${esc((m && m.path) || '')}</span></p>
+      <div class="log-tools">
+        ${['all', 'error', 'warn', 'info', 'debug', 'trace'].map(managerChip).join('')}
+        <input id="manager-search" type="search" placeholder="Filter lines…" value="${esc(S.managerSearch)}">
+        <label class="follow"><input type="checkbox" id="manager-follow"${S.managerFollow ? ' checked' : ''}> Follow</label>
+      </div>
+      <div class="log-well manager-tail" id="manager-tail">${managerTailHtml()}</div>
+    </section>`;
+  }
+
+  function managerTailHtml() {
+    if (!S.manager) return `<div class="manager-empty"><span class="spinner"></span>Reading the manager log…</div>`;
+    const q = S.managerSearch.trim().toLowerCase();
+    const re = S.managerLevel === 'all' ? null : new RegExp(`\\b${S.managerLevel.toUpperCase()}\\b`);
+    const lines = (S.manager.lines || []).filter((l) => (!re || re.test(l)) && (!q || l.toLowerCase().includes(q)));
+    if (!lines.length) return `<div class="manager-empty">No lines match${q ? ` “${esc(S.managerSearch)}”` : ''}.</div>`;
+    return lines
+      .map((l) => {
+        const m = l.match(/\b(ERROR|WARN|INFO|DEBUG|TRACE)\b/);
+        return `<div class="log-line${m ? ' ' + m[1].toLowerCase() : ''}">${esc(l)}</div>`;
+      })
+      .join('');
+  }
+
+  async function loadManager(silent = false) {
+    if (S.view !== 'logs' || S.managerBusy) return;
+    S.managerBusy = true;
+    try {
+      S.manager = await invoke('manager_log', { lines: 300 });
+    } catch (e) {
+      if (!silent) toast(errText(e), 'error');
+    } finally {
+      S.managerBusy = false;
+      if (S.view === 'logs') {
+        const tail = document.getElementById('manager-tail');
+        if (!tail) {
+          render();
+        } else {
+          tail.innerHTML = managerTailHtml();
+          const path = document.getElementById('manager-path');
+          if (path) {
+            path.textContent = S.manager?.path || '';
+            path.title = S.manager?.path || '';
+          }
+          const filter = document.getElementById('manager-filter');
+          if (filter) filter.textContent = S.manager?.filter || 'info';
+        }
+        scheduleManager();
+      }
+    }
+  }
+
+  function scheduleManager() {
+    clearTimeout(S.managerTimer);
+    if (S.view === 'logs' && S.managerFollow) S.managerTimer = setTimeout(() => loadManager(true), 3000);
+  }
+
   function logBits(name) {
+    if (String(name || '').startsWith('manager.log')) return { kind: 'manager', game: '' };
     const stem = String(name || '').replace(/\.log$/, '');
     let parts = stem.split('-').filter(Boolean);
     if (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();
@@ -671,6 +750,11 @@
             <div style="flex:1"><div style="font-size:12px">nxrt-frontend</div><div class="muted small">A manager for the nxrt Switch recomps.</div></div>
             ${tag(`v${s.version}`, '')}
           </div>
+        </section>
+        <section class="card setting">
+          <div class="setting-head"><span class="section-title">Diagnostics</span><span class="spacer"></span><button class="btn secondary" data-act="go-logs">Manager log</button></div>
+          <p>The manager's own log: level <span class="mono">${esc((s.log || {}).filter || 'info')}</span>, a daily file, seven kept. Set <span class="mono">NXRT_FRONTEND_LOG=debug</span> for more detail; <span class="mono">NXRT_GAME_LOG=debug</span> passes a level to a game's nxrt log.</p>
+          <div class="path">${esc((s.log || {}).path || (s.log || {}).dir || '')}</div>
         </section>
       </div>
     </div>`;
@@ -1203,6 +1287,13 @@
         return invoke('reveal', { path: S.snap.config_dir, file: false });
       case 'open-logs-dir':
         return invoke('open_logs');
+      case 'manager-refresh':
+        return loadManager(false);
+      case 'manager-level':
+        S.managerLevel = el.dataset.level;
+        return render();
+      case 'go-logs':
+        return go('logs');
       case 'pad-help':
         return helpSheet();
       case 'issue':
@@ -1655,8 +1746,31 @@
     });
 
     document.addEventListener('change', (e) => {
+      if (e.target.id === 'manager-follow') {
+        S.managerFollow = e.target.checked;
+        scheduleManager();
+        return;
+      }
       const sel = e.target.closest('select[data-c]');
       if (sel) saveControls(sel.closest('.controls-form'));
+    });
+
+    document.addEventListener('input', (e) => {
+      if (e.target.id === 'manager-search') {
+        S.managerSearch = e.target.value;
+        const tail = document.getElementById('manager-tail');
+        if (tail) tail.innerHTML = managerTailHtml();
+      }
+    });
+
+    const reportUi = (level, message, source, stack) =>
+      invoke('log_ui', { level, message, source, stack }).catch(() => {});
+    window.addEventListener('error', (e) => {
+      reportUi('error', e.message || 'Script error', e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : '', e.error && e.error.stack ? e.error.stack : '');
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const reason = e.reason;
+      reportUi('error', `Unhandled rejection: ${reason && reason.message ? reason.message : String(reason)}`, 'promise', reason && reason.stack ? reason.stack : '');
     });
 
     document.addEventListener('keydown', (e) => {

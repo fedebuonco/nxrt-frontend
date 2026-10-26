@@ -564,3 +564,30 @@ body.pad-on .page { padding-bottom: 86px; }
 /* report an issue */
 .issue-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .issue-row .muted { font-size: 10.5px; }
+
+/* manager log */
+.manager-card { margin-bottom: 16px; }
+.manager-card .hint .mono { overflow-wrap: anywhere; }
+.log-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 10px; }
+.log-tools .chip {
+  height: 24px; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: transparent;
+  color: var(--muted); font: inherit; font-size: 10px; letter-spacing: .03em; cursor: pointer;
+}
+.log-tools .chip:hover { border-color: var(--line-hi); color: var(--sub); }
+.log-tools .chip.on { border-color: var(--accent); color: var(--accent); background: rgba(95, 212, 198, .08); }
+.log-tools input[type="search"] {
+  flex: 1; min-width: 150px; height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--well); color: var(--text); font: inherit; font-size: 11px;
+}
+.log-tools input[type="search"]:focus { outline: none; border-color: var(--accent); }
+.log-tools .follow { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted); cursor: pointer; }
+.log-tools .follow input { accent-color: var(--accent); margin: 0; }
+.manager-tail {
+  margin-top: 0; min-height: 120px; max-height: 310px; overflow: auto; padding: 9px 12px;
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.55; white-space: pre-wrap;
+}
+.manager-tail .log-line { overflow-wrap: anywhere; }
+.manager-tail .log-line.error { color: var(--red); }
+.manager-tail .log-line.warn { color: var(--amber); }
+.manager-tail .log-line.debug, .manager-tail .log-line.trace { color: var(--muted); }
+.manager-empty { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; padding: 6px 0; }
