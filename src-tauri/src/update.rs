@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub const DEFAULT_URL: &str =
-    "https://raw.githubusercontent.com/fedebuonco/nxrt/macos-core/frontend/latest.json";
+    "https://raw.githubusercontent.com/fedebuonco/nxrt/master/frontend/latest.json";
 const TTL: Duration = Duration::from_secs(6 * 3600);
 
 #[derive(Serialize, Clone)]

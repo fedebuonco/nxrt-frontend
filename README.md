@@ -24,7 +24,8 @@ game's files and game code, and Play.
 
 ![The controller map](docs/screenshots/controller-map.png)
 
-_Screenshots from a personal library. The game covers belong to their owners and are not distributed with nxrt._
+_Screenshots of a demo library (a made-up game, the one the tests use). With your own games, the library shows each
+game's cover read from your package._
 
 ## Build
 
@@ -40,8 +41,9 @@ npm run build     # stages nxrt, builds the window, makes the app
 npm run dmg       # packages the app into dist/nxrt-<version>-<arch>.dmg
 ```
 
-The app bundle lands in `src-tauri/target/release/bundle/macos/`. A local arm64 DMG is in
-[`dist/`](dist/nxrt-0.1.0-arm64.dmg) (ad-hoc signed, not notarized — right-click → Open the first time).
+The app bundle lands in `src-tauri/target/release/bundle/macos/`, the DMG in `dist/`. Ready-made DMGs (Apple silicon,
+ad-hoc signed, not notarized: right-click → Open the first time) are on the
+[Releases](https://github.com/fedebuonco/nxrt-frontend/releases) page.
 
 ## Not affiliated with Nintendo
 
@@ -74,5 +76,10 @@ See [docs/TESTING.md](docs/TESTING.md).
 - [Using nxrt-frontend](docs/USAGE.md) — adding games, controller settings, updates, logs, the CLI.
 - [Architecture](docs/ARCHITECTURE.md) — how the app is put together and what comes next.
 - [Logging](docs/LOGGING.md) — the manager's and nxrt's logs.
+
+## License
+
+Public domain ([Unlicense](LICENSE)), like nxrt. The components the app includes keep their own licenses: see
+[THIRD_PARTY.md](THIRD_PARTY.md).
 
 nxrt-frontend is not affiliated with Nintendo. Nintendo Switch is a trademark of Nintendo.

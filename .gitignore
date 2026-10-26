@@ -11,3 +11,6 @@ web-dist/
 # Playwright
 playwright-report/
 test-results/
+
+# Built DMGs (npm run dmg): published as GitHub release assets, not committed
+dist/
