@@ -117,6 +117,18 @@ effective ones (the game's start screen shows them). A row the manager does not 
 The overlay is read by the `nxrt` submodule (`input/input.c`, `input_loaded`). A game app built before that revision
 ignores `NXRT_CONTROLLER`; rebuild the app to pick it up.
 
+## Updates
+
+The manager checks a small public manifest at start-up (cached six hours; **Settings → Diagnostics → Check now** forces
+it). If its version is newer than this app, a quiet **Update available** chip appears under the sidebar sections; the chip
+opens the release page. The check is a plain GET — no account or token — and the app never installs anything itself.
+
+The manifest is `frontend/latest.json` in the public nxrt repo (raw:
+`https://raw.githubusercontent.com/fedebuonco/nxrt/macos-core/frontend/latest.json`), so the check works without access to
+this private repo; its `url` points at the releases here. For development, `NXRT_FRONTEND_UPDATE_URL=<manifest>` points
+the check at another JSON (`https://`, or `http://127.0.0.1`/`http://localhost` for a local test). To publish an update,
+bump this app's version and the manifest's `version`/`url`/`notes`; the running app shows the chip on its next check.
+
 ## Logging
 
 The manager writes its own log to `~/Library/Application Support/nxrt-frontend/logs/manager.log.YYYY-MM-DD` (daily,

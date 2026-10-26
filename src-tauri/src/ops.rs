@@ -113,6 +113,14 @@ pub fn reveal(p: &Path) {
     let _ = std::process::Command::new("explorer").arg(p).spawn();
 }
 
+/// The release page from the update manifest: only the project's GitHub pages.
+pub fn open_update(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://github.com/fedebuonco/") {
+        return Err("Refusing to open an unexpected update URL".into());
+    }
+    open_browser(url)
+}
+
 /// The little support link in the sidebar.
 pub fn open_donate() -> Result<(), String> {
     open_browser("https://ko-fi.com/fedebuonco")

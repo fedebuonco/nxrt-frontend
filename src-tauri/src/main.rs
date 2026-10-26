@@ -13,6 +13,7 @@ mod ops;
 mod pads;
 mod recomp;
 mod runner;
+mod update;
 
 use tauri::Manager;
 
@@ -75,6 +76,8 @@ fn main() {
             commands::manager_log,
             commands::open_donate,
             commands::log_ui,
+            commands::check_update,
+            commands::open_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running nxrt-frontend");

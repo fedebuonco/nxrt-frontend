@@ -3,6 +3,7 @@ use crate::api::{self, ExitInfo, RunInfo, Snapshot};
 use crate::controls::{self, Controls};
 use crate::issues;
 use crate::logging;
+use crate::update;
 use crate::library::{self, Entry, Library};
 use crate::manage;
 use crate::ops;
@@ -584,6 +585,22 @@ pub fn save_dev(state: State<Shared>, index: usize, dir: String, cmd: String) ->
         lib.save()?;
     }
     Ok(snapshot(&state))
+}
+
+/// The frontend update manifest (cached); force bypasses the cache.
+#[tauri::command]
+pub async fn check_update(force: Option<bool>) -> update::UpdateInfo {
+    let force = force.unwrap_or(false);
+    match tauri::async_runtime::spawn_blocking(move || update::check(force)).await {
+        Ok(info) => info,
+        Err(e) => update::failed(format!("update check: {e}")),
+    }
+}
+
+/// Opens the release page from the update manifest (only the project's GitHub pages).
+#[tauri::command]
+pub fn open_update(url: String) -> Result<(), String> {
+    ops::open_update(&url)
 }
 
 /// The small sidebar support link.

@@ -22,6 +22,7 @@
     managerSearch: '',
     managerFollow: true,
     managerTimer: 0,
+    update: null,
     runs: {},
     icons: new Map(),
     disc: new Set(),
@@ -712,6 +713,54 @@
     renderHints();
   }
 
+
+  // ---- updates: a small public manifest, a quiet sidebar chip ------------------------------------------------
+  async function checkForUpdate(force = false) {
+    try {
+      S.update = await invoke('check_update', { force });
+    } catch (e) {
+      S.update = { available: false, error: errText(e), current: (S.snap && S.snap.version) || '', latest: '' };
+    }
+    renderUpdate();
+    if (S.view === 'settings') render();
+  }
+
+  function renderUpdate() {
+    const el = document.getElementById('update');
+    if (!el) return;
+    const u = S.update;
+    if (!u || !u.available) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    const title = u.notes || `v${u.latest} is available`;
+    el.hidden = false;
+    el.innerHTML = `<button class="update-chip" data-act="open-update" title="${esc(title)}"><span class="update-dot"></span><span>Update available</span><span class="update-ver">v${esc(u.latest)}</span></button>`;
+  }
+
+  function updateStatus() {
+    const u = S.update;
+    const current = (S.snap && S.snap.version) || (u && u.current) || '';
+    if (!u) return 'checking…';
+    if (u.error) {
+      const err = u.error.length > 140 ? `${u.error.slice(0, 137)}…` : u.error;
+      return `could not check <span class="muted">(${esc(err)})</span>`;
+    }
+    if (u.available) return `<b>v${esc(u.latest)}</b> available — use the sidebar`;
+    return `up to date <span class="muted">(v${esc(current)})</span>`;
+  }
+
+  async function openUpdate() {
+    const u = S.update;
+    if (!u || !u.available || !u.url) return;
+    try {
+      await invoke('open_update', { url: u.url });
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
   // ---- logs -----------------------------------------------------------------------------------------------------
 
   function viewLogs() {
@@ -897,6 +946,12 @@
           <div class="setting-head"><span class="section-title">Diagnostics</span><span class="spacer"></span><button class="btn secondary" data-act="go-logs">Manager log</button></div>
           <p>The manager's own log: level <span class="mono">${esc((s.log || {}).filter || 'info')}</span>, a daily file, seven kept. Set <span class="mono">NXRT_FRONTEND_LOG=debug</span> for more detail; <span class="mono">NXRT_GAME_LOG=debug</span> passes a level to a game's nxrt log.</p>
           <div class="path">${esc((s.log || {}).path || (s.log || {}).dir || '')}</div>
+          <div style="border-top:1px solid var(--line);margin:12px 0"></div>
+          <div class="update-line">
+            <span class="update-status">${updateStatus()}</span>
+            <span class="spacer"></span>
+            <button class="btn ghost sm" data-act="check-update">Check now</button>
+          </div>
         </section>
       </div>
     </div>`;
@@ -1008,6 +1063,7 @@
     if (prev && (main.contains(document.activeElement) || nav.contains(document.activeElement))) S.focusSel = prev;
     renderNav();
     renderKeys();
+    renderUpdate();
     main.innerHTML =
       S.view === 'game' ? viewGame() : S.view === 'logs' ? viewLogs() : S.view === 'settings' ? viewSettings() : viewLibrary();
     S.lastView = S.view;
@@ -1450,6 +1506,10 @@
         return render();
       case 'go-logs':
         return go('logs');
+      case 'open-update':
+        return openUpdate();
+      case 'check-update':
+        return checkForUpdate(true);
       case 'donate':
         return openDonate();
       case 'pad-test':
@@ -2058,6 +2118,7 @@
       }
     });
 
+    setTimeout(() => checkForUpdate(false), 1200);
     invoke('pad_status')
       .then((s) => {
         S.pad = s || { connected: false, name: null, error: null };
