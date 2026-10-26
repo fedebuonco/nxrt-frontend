@@ -39,7 +39,9 @@ npm run dev       # tauri dev: builds the Rust app and opens the window
 ```
 
 `npm run build` makes an app bundle in `src-tauri/target/release/bundle/macos/` (unsigned: right-click → Open the first
-time). `NXRT_DIR=<path>` builds against another nxrt checkout. `npm install` fetches the Tauri CLI and nothing else: the
+time). A local arm64 build is kept in [`dist/`](dist) — `nxrt-0.1.0-arm64.dmg`, ad-hoc signed and not notarized.
+
+`NXRT_DIR=<path>` builds against another nxrt checkout. `npm install` fetches the Tauri CLI and nothing else: the
 window has no bundler.
 
 The window's files are embedded when the Rust app is built, so **restart `npm run dev` after editing `ui/`** (a plain
@@ -140,6 +142,7 @@ The steps print `{"nxrt_progress":1,...}` lines and one `{"nxrt_setup":1,...}` r
 | | |
 |---|---|
 | `ui/` | the window: `index.html`, `app.css`, `app.js` (views, focus engine, pad map, sheets) |
+| `dist/` | a local, unsigned arm64 build and its notes |
 | `src-tauri/src/main.rs` | the builder, the command-line switches, the Tauri command list |
 | `src-tauri/src/commands.rs` | library/run/step commands, the thread that follows a run and emits its log |
 | `src-tauri/src/api.rs` | the serialisable view of a game, gathered from its app in parallel |
