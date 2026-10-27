@@ -64,6 +64,8 @@ export const snapshot = {
       load_error: null,
       build_mismatch: false,
       controls: {},
+      backend: 'nxrt',
+      backends: ['nxrt', 'nxnative'],
     },
   ],
   keys: '/tmp/nxrt-test/prod.keys',

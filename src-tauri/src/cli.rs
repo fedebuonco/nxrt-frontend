@@ -94,6 +94,24 @@ fn list() {
                 s.data_root,
                 v.game_dir.as_deref().unwrap_or("")
             );
+        } else {
+            // (nxnative: its steps are the build probe's, and its build is the work folder)
+            println!(
+                "  steps: files {} generated {} compiled {} | build {}",
+                v.steps.files,
+                v.steps.generated,
+                v.steps.code,
+                v.exe.as_deref().unwrap_or("")
+            );
+        }
+        if v.backends.len() > 1 {
+            let also: Vec<&str> = v
+                .backends
+                .iter()
+                .map(String::as_str)
+                .filter(|b| *b != v.backend)
+                .collect();
+            println!("  runs with: {} (also {})", v.backend, also.join(", "));
         }
         if let Some(r) = &v.romfs {
             println!(

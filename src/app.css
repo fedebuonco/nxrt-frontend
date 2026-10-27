@@ -1977,3 +1977,14 @@ body.pad-on .page {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* the backend a game runs with (game page) */
+.backend-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.backend-switch .muted {
+  margin-right: 4px;
+}

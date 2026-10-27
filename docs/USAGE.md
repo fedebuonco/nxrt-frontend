@@ -25,6 +25,25 @@ per-game settings, updates, logs, the command line, and what the game apps answe
 
 Each run's log is shown live and kept in `~/Library/Application Support/nxrt-frontend/logs/`.
 
+## The backend: nxrt or nxnative
+
+A game runs on one of two backends, and the library remembers which:
+
+- **nxrt** (the default): the game's code recompiled by this manager — the steps above.
+- **nxnative**: the game's own code run natively on this Mac, built by [nxnative](https://github.com/seedds/nxnative)
+  from the game's NSPs. The game's steps become **Build for Mac**, then **Play**.
+
+A game with both an nxrt app and an NSP shows **Runs with nxrt | nxnative** under its state; one click switches which
+backend Play and the build use. Nothing is deleted by switching: both builds stay where they are, so a game can go back
+and forth.
+
+The nxnative build works in `<NSP folder>/<title id>_build`, so the game's NSP folder has to be on an APFS volume: on
+exFAT or FAT, macOS writes a `._<name>` file beside every file and nxnative's tools read those as game files. It needs
+Python 3, Homebrew's `spirv-cross` and `glslangValidator`, and .NET.
+
+The nxnative checkout is `NXNATIVE_DIR` if set, else the path in **Settings → nxnative**, else the copy on the
+development volume (`/Volumes/FE3HDev/nxnative`).
+
 ## Controller and keyboard
 
 Any standard controller works over USB or Bluetooth — Xbox, DualSense, Switch Pro, 8BitDo — read with SDL3 (the

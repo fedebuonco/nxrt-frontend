@@ -1,6 +1,6 @@
 //! The window's side of the app: everything the web UI can ask for, plus the one thread per run that keeps it posted.
 use crate::api::{self, ExitInfo, RunInfo, Snapshot};
-use crate::controls::Controls;
+use crate::controls::{self, Controls};
 use crate::issues;
 use crate::library::{self, Entry};
 use crate::logging;
@@ -39,10 +39,8 @@ struct RunFinished {
 pub fn snapshot(sh: &Shared) -> Snapshot {
     let t0 = std::time::Instant::now();
     let lib = sh.library.lock().unwrap().clone();
-    let infos = api::gather_all(
-        &lib.games,
-        &crate::nxnative::repo(lib.nxnative_dir.as_deref()),
-    );
+    let nx_repo = crate::nxnative::repo(lib.nxnative_dir.as_deref());
+    let infos = api::gather_all(&lib.games, &nx_repo);
     let runs = sh.runs.lock().unwrap();
     let last = sh.last.lock().unwrap();
     let mut games = Vec::with_capacity(lib.games.len());
@@ -69,9 +67,8 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
             .map(|p| p.display().to_string()),
         config_dir: library::dir().display().to_string(),
         recomps_dir: library::dir().join("recomps").display().to_string(),
-        nxrt_dir: crate::nxnative::repo(lib.nxnative_dir.as_deref())
-            .display()
-            .to_string(),
+        nxrt_dir: recomp::default_nxrt().display().to_string(),
+        nxnative_dir: nx_repo.display().to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
         running: runs.len(),
         message: lib.load_error.clone().or_else(|| {
@@ -335,9 +332,7 @@ fn finish(
                     }
                     _ => (
                         match &progress.failed {
-                            Some(f) => {
-                                format!("The build stopped: {f}")
-                            }
+                            Some(f) => format!("The build stopped: {f}"),
                             None => format!("The build {how}: see its log in the logs folder"),
                         },
                         false,
@@ -574,22 +569,41 @@ pub fn start_game(
     mode: String,
 ) -> Result<(), String> {
     tracing::info!(target: "run", key = %key, mode = %mode, "game start requested");
-    let entry = {
+    let (entry, library_controls) = {
         let lib = state.library.lock().unwrap();
-        lib.games
+        let e = lib
+            .games
             .iter()
             .find(|e| api::game_key(e) == key)
             .cloned()
-            .ok_or("No such game")?
+            .ok_or("No such game")?;
+        (e, lib.controls.clone())
     };
-    let cmd = entry
-        .run_cmd
-        .clone()
-        .ok_or("Not built for this Mac yet: Build for Mac first")?;
-    let work = crate::nxnative::work_dir(&entry).ok_or("This game has no NSP folder")?;
+    if entry.backend == library::Backend::Nxnative {
+        return start_nxnative_game(&state, &app, &key, &entry);
+    }
+    let exe = entry.exe.clone().ok_or("This game has no nxrt app yet")?;
     not_running(&state, &key)?;
-    let id = crate::nxnative::title_id(&entry).unwrap_or_else(|| "game".into());
-    let run = runner::Run::nx_game(&cmd, &work, log_file(&id, ""), || {})?;
+    // (the game's own controls over the library's defaults; only what is set is passed)
+    let effective = library_controls.merged(&entry.controls);
+    let overlay = if effective.is_empty() {
+        None
+    } else {
+        let path = controls::overlay_path(&key);
+        effective.write_overlay(&path)?;
+        Some(path)
+    };
+    let id = runner::describe(&exe)
+        .map(|d| d.id)
+        .unwrap_or_else(|_| "game".into());
+    let run = runner::Run::game(
+        &exe,
+        entry.data_root.as_deref(),
+        mode == "play",
+        log_file(&id, ""),
+        || {},
+        overlay.as_deref(),
+    )?;
     start(&state, &app, &key, run, String::new())
 }
 
@@ -707,20 +721,57 @@ pub fn start_step(
     start(&state, &app, &key, run, code_id)
 }
 
-/// Build for Mac: nxnative's script makes everything the game needs to run on this Mac, in its NSP folder.
 #[tauri::command]
 pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<(), String> {
-    tracing::info!(target: "run", key = %key, "nxnative build requested");
-    let (entry, repo, lib_keys) = {
+    tracing::info!(target: "run", key = %key, "dev build requested");
+    let entry = {
         let lib = state.library.lock().unwrap();
-        let e = lib
-            .games
+        lib.games
             .iter()
             .find(|e| api::game_key(e) == key)
             .cloned()
-            .ok_or("No such game")?;
+            .ok_or("No such game")?
+    };
+    if entry.backend == library::Backend::Nxnative {
+        return start_nxnative_build(&state, &app, &key, &entry);
+    }
+    let (dir, cmd) = match (&entry.build_dir, &entry.build_cmd) {
+        (Some(d), Some(c)) => (d.clone(), c.clone()),
+        _ => return Err("No Dev build command set".into()),
+    };
+    not_running(&state, &key)?;
+    let run = runner::Run::dev_build(&cmd, &dir, log_file("dev", "-build"), || {})?;
+    start(&state, &app, &key, run, String::new())
+}
+
+/// nxnative: the game in nxnative's host, by the command its Mac build printed.
+fn start_nxnative_game(
+    sh: &Shared,
+    app: &AppHandle,
+    key: &str,
+    entry: &library::Entry,
+) -> Result<(), String> {
+    let cmd = entry
+        .run_cmd
+        .clone()
+        .ok_or("Not built for this Mac yet: Build for Mac first")?;
+    let work = crate::nxnative::work_dir(entry).ok_or("This game has no NSP folder")?;
+    not_running(sh, key)?;
+    let id = crate::nxnative::title_id(entry).unwrap_or_else(|| "game".into());
+    let run = runner::Run::nx_game(&cmd, &work, log_file(&id, ""), || {})?;
+    start(sh, app, key, run, String::new())
+}
+
+/// nxnative: Build for Mac, nxnative's script on the game's NSP folder (everything into <NSP folder>/<title ID>_build).
+fn start_nxnative_build(
+    sh: &Shared,
+    app: &AppHandle,
+    key: &str,
+    entry: &library::Entry,
+) -> Result<(), String> {
+    let (repo, lib_keys) = {
+        let lib = sh.library.lock().unwrap();
         (
-            e,
             crate::nxnative::repo(lib.nxnative_dir.as_deref()),
             lib.keys.clone(),
         )
@@ -728,7 +779,7 @@ pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<()
     if !repo.join("scripts/build_ipa_from_nsp.py").is_file() {
         return Err(format!("No nxnative checkout at {}", repo.display()));
     }
-    let nsp = crate::nxnative::nsp_dir(&entry).ok_or("This game has no NSP folder")?;
+    let nsp = crate::nxnative::nsp_dir(entry).ok_or("This game has no NSP folder")?;
     if let Some(why) = crate::nxnative::unsuitable(&nsp) {
         return Err(why);
     }
@@ -739,10 +790,30 @@ pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<()
         .ok_or("This game has no package")?;
     let keys = ops::keys_for(entry.keys.as_deref().or(lib_keys.as_deref()), &package)
         .ok_or("No prod.keys: choose them in the toolbar")?;
-    not_running(&state, &key)?;
-    let id = crate::nxnative::title_id(&entry).unwrap_or_else(|| "game".into());
+    not_running(sh, key)?;
+    let id = crate::nxnative::title_id(entry).unwrap_or_else(|| "game".into());
     let run = runner::Run::nx_build(&repo, &nsp, &keys, log_file(&id, "-build"), || {})?;
-    start(&state, &app, &key, run, String::new())
+    start(sh, app, key, run, String::new())
+}
+
+/// Which backend runs a game (nxrt, nxnative): the window's switch. Not while something of the game runs.
+#[tauri::command]
+pub fn set_backend(state: State<Shared>, key: String, backend: String) -> Result<Snapshot, String> {
+    let b = library::Backend::parse(&backend).ok_or_else(|| format!("No backend {backend}"))?;
+    not_running(&state, &key)?;
+    {
+        let mut lib = state.library.lock().unwrap();
+        let i = entry_index(&lib, &key)?;
+        if !api::backends(&lib.games[i]).iter().any(|x| x == b.name()) {
+            return Err(
+                "This game has no NSP: nxnative builds from the game's NSP folder".to_string(),
+            );
+        }
+        lib.games[i].backend = b;
+        lib.save()?;
+    }
+    tracing::info!(target: "library", key = %key, backend = %backend, "backend set");
+    Ok(snapshot(&state))
 }
 
 #[tauri::command]

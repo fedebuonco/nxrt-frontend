@@ -146,6 +146,7 @@ for (const [kind, want] of [
 test('an nxnative game is built for Mac, then played', async ({ page }) => {
   const snap = structuredClone(snapshot);
   Object.assign(snap.games[0], {
+    backend: 'nxnative',
     ready: false,
     state: 'Next: build it for this Mac',
     tone: 'warn',
@@ -155,6 +156,23 @@ test('an nxnative game is built for Mac, then played', async ({ page }) => {
   await open(page, {}, snap);
   await openDemo(page);
   await expect(page.locator('.steps .name').nth(1)).toHaveText('Build for Mac');
+  await expect(page.locator('[data-act="start-screen"]')).toHaveCount(0);
   await page.locator('.steps [data-act="next"]').click();
   await expect.poll(async () => (await calls(page, 'start_dev')).map((c) => c.args)).toEqual([{ key: demo.key }]);
+});
+
+test('the backend switch changes what runs the game', async ({ page }) => {
+  const switched = structuredClone(snapshot);
+  switched.games[0].backend = 'nxnative';
+  await open(page, { set_backend: switched });
+  await openDemo(page);
+  const nxrt = page.locator('[data-act="backend"][data-backend="nxrt"]');
+  const nxn = page.locator('[data-act="backend"][data-backend="nxnative"]');
+  await expect(nxrt).toHaveAttribute('aria-pressed', 'true');
+  await nxn.click();
+  await expect
+    .poll(async () => (await calls(page, 'set_backend')).map((c) => c.args))
+    .toEqual([{ key: demo.key, backend: 'nxnative' }]);
+  await expect(nxn).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.toast.ok')).toContainText('now runs with nxnative');
 });

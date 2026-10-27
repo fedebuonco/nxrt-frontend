@@ -350,6 +350,26 @@ pub struct Run {
 }
 
 impl Run {
+    /// The game: `--play` boots straight into it (the manager is the start screen), without it the app's own start
+    /// screen comes up (its settings, setup).
+    pub fn game(
+        exe: &Path,
+        data_root: Option<&Path>,
+        play: bool,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+        controls: Option<&Path>,
+    ) -> Result<Run, String> {
+        let mut c = command(exe, data_root);
+        if let Some(p) = controls {
+            c.env("NXRT_CONTROLLER", p);
+        }
+        if play {
+            c.arg("--play");
+        }
+        Run::spawn(c, exe, Kind::Game, log_file, repaint)
+    }
+
     /// A setup step: Files / All from src (a folder, or an .nsp / .xci with prod.keys beside it; "" for All = only
     /// the game code), Generate and Compile on the files already set up. Hidden: no window.
     /// keys: the player's prod.keys for a package (NXRT_KEYS; None: the app looks beside it and in ~/.switch).
@@ -380,6 +400,18 @@ impl Run {
         };
         c.env("NXRT_HIDDEN", "1");
         Run::spawn(c, exe, Kind::Setup(stage), log_file, repaint)
+    }
+
+    /// A shell command in dir (a game's source checkout: `make gen` and the game library).
+    pub fn dev_build(
+        cmd: &str,
+        dir: &Path,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
+        let mut c = Command::new("/bin/sh");
+        c.arg("-c").arg(cmd).current_dir(dir);
+        Run::spawn(c, dir, Kind::DevBuild, log_file, repaint)
     }
 
     /// A game built for this Mac by nxnative's script, from its NSP folder (nxnative.rs).
@@ -441,10 +473,8 @@ impl Run {
             c.env("NXRT_LOG", level);
         }
         tracing::debug!(target: "run", run = %run_id, exe = %what.display(), kind = ?kind, "spawning");
-        if kind != Kind::DevBuild
-            && kind != Kind::Create
-            && kind != Kind::NxBuild
-            && kind != Kind::Game
+        // (an nxrt app starts in its own folder; nxnative's run command and builds set their own)
+        if kind != Kind::DevBuild && kind != Kind::Create && kind != Kind::NxBuild && what.is_file()
         {
             if let Some(dir) = what.parent() {
                 c.current_dir(dir);
@@ -788,8 +818,29 @@ echo "args: $*""#,
     }
 
     #[test]
-    fn an_nxnative_game_runs_its_command_in_its_folder() {
+    fn a_game_gets_its_environment() {
         let d = scratch("env");
+        let exe = app(
+            &d,
+            r#"echo "root=$NXRT_DATA_ROOT pad=$NXRT_CONTROLLER run=$NXRT_RUN_ID $*""#,
+        );
+        let mut run = Run::game(
+            &exe,
+            Some(Path::new("/data/root")),
+            true,
+            None,
+            || {},
+            Some(Path::new("/pad.conf")),
+        )
+        .unwrap();
+        assert_eq!(wait_exit(&mut run), "closed");
+        let want = format!("root=/data/root pad=/pad.conf run={} --play", run.run_id);
+        wait_for(|| run.log.lock().unwrap().iter().any(|l| *l == want));
+    }
+
+    #[test]
+    fn an_nxnative_game_runs_its_command_in_its_folder() {
+        let d = scratch("nx-env");
         let cmd = "DM_WINDOW=1 sh -c 'echo \"win=$DM_WINDOW run=$NXRT_RUN_ID pwd=$(pwd -P)\"'";
         let mut run = Run::nx_game(cmd, &d, None, || {}).unwrap();
         assert_eq!(wait_exit(&mut run), "closed");

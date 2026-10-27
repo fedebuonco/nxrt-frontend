@@ -52,9 +52,41 @@ pub struct Entry {
     /// controller settings for this game, layered over the library's defaults (controls.rs)
     #[serde(default, skip_serializing_if = "Controls::is_empty")]
     pub controls: Controls,
+    /// which backend runs this game: nxrt (its recomp app) or nxnative (its Mac build); the window switches it
+    #[serde(default, skip_serializing_if = "Backend::is_nxrt")]
+    pub backend: Backend,
     /// nxnative: the command that runs the game, as its Mac build printed it (nxnative.rs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_cmd: Option<String>,
+}
+
+/// What runs a game: an nxrt recomp (its own app, built from the game's code translated to C), or nxnative (the
+/// game's own code run natively in nxnative's host, github.com/seedds/nxnative).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    #[default]
+    Nxrt,
+    Nxnative,
+}
+
+impl Backend {
+    pub fn is_nxrt(&self) -> bool {
+        *self == Backend::Nxrt
+    }
+    pub fn name(&self) -> &'static str {
+        match self {
+            Backend::Nxrt => "nxrt",
+            Backend::Nxnative => "nxnative",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Backend> {
+        match s {
+            "nxrt" => Some(Backend::Nxrt),
+            "nxnative" => Some(Backend::Nxnative),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -94,7 +126,7 @@ pub fn check_keys(p: &Path) -> Result<(), String> {
 pub fn dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("nxnative-frontend") // (its own library: the nxrt manager's is left alone)
+        .join("nxrt-frontend")
 }
 
 pub fn icon_path(title_id: &str) -> PathBuf {

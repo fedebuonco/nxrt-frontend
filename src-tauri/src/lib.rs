@@ -64,6 +64,7 @@ pub fn run() {
             commands::start_game,
             commands::start_step,
             commands::start_dev,
+            commands::set_backend,
             commands::stop,
             commands::create_recomp,
             commands::save_dev,
