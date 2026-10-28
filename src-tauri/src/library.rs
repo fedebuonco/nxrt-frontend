@@ -255,6 +255,17 @@ mod tests {
     }
 
     #[test]
+    fn backend_names_round_trip_and_unknown_names_are_rejected() {
+        for b in [Backend::Nxrt, Backend::Nxnative] {
+            assert_eq!(Backend::parse(b.name()), Some(b));
+        }
+        assert_eq!(Backend::parse(""), None);
+        assert_eq!(Backend::parse("Metal"), None);
+        assert!(Backend::Nxrt.is_nxrt());
+        assert!(!Backend::Nxnative.is_nxrt());
+    }
+
+    #[test]
     fn an_old_library_has_no_controls() {
         let lib: Library = toml::from_str("[[game]]\nexe = \"/tmp/x\"\n").unwrap();
         assert!(lib.controls.is_empty());

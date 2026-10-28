@@ -8,6 +8,15 @@ export async function installMock(page, { snapshot, update, answers = {} }) {
   await page.addInitScript(
     ({ snapshot, update, answers }) => {
       const calls = [];
+      const storeKey = 'nxrt-test-snapshot';
+      const stored = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(storeKey) || 'null');
+        } catch {
+          return null;
+        }
+      })();
+      const current = stored || snapshot;
       window.__answers = answers;
       const listeners = {};
       window.__calls = calls;
@@ -18,9 +27,10 @@ export async function installMock(page, { snapshot, update, answers = {} }) {
             if (cmd in window.__answers) {
               const a = structuredClone(window.__answers[cmd]);
               if (a && a.__error) throw a.__error;
+              if (cmd === 'set_backend' && a) localStorage.setItem(storeKey, JSON.stringify(a));
               return a;
             }
-            if (cmd === 'snapshot_command') return structuredClone(snapshot);
+            if (cmd === 'snapshot_command') return structuredClone(current);
             if (cmd === 'pad_status') return { connected: true, name: 'Xbox Wireless Controller', error: null };
             if (cmd === 'check_update') return update;
             if (cmd === 'logs') return [];

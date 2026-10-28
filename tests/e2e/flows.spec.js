@@ -176,12 +176,34 @@ test('the backend switch changes what runs the game', async ({ page }) => {
   await expect(page.locator('.toast.ok')).toContainText('now runs with nxnative');
 });
 
+test('a backend switch that fails says why and keeps the old backend', async ({ page }) => {
+  await open(page, { set_backend: { __error: 'nxnative needs the game NSP' } });
+  await openDemo(page);
+  const picker = page.locator('select[data-act="backend"]');
+  await picker.selectOption('nxnative');
+  await expect(page.locator('.toast.error')).toContainText('needs the game NSP');
+  await expect(picker).toHaveValue('nxrt');
+});
+
 test('the backend switch is a dropdown with every offered backend', async ({ page }) => {
   await open(page);
   await openDemo(page);
   const picker = page.locator('select[data-act="backend"]');
   await expect(picker.locator('option')).toHaveText(['nxrt', 'nxnative']);
   await expect(picker).toHaveAttribute('aria-label', 'Backend');
+});
+
+test('the backend choice survives a window reload', async ({ page }) => {
+  const switched = structuredClone(snapshot);
+  switched.games[0].backend = 'nxnative';
+  await open(page, { set_backend: switched });
+  await openDemo(page);
+  await page.locator('select[data-act="backend"]').selectOption('nxnative');
+  await expect(page.locator('select[data-act="backend"]')).toHaveValue('nxnative');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  await openDemo(page);
+  await expect(page.locator('select[data-act="backend"]')).toHaveValue('nxnative');
 });
 
 test('the backend switch is disabled while the game runs', async ({ page }) => {

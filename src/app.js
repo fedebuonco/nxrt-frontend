@@ -1520,6 +1520,7 @@ import { ICONS } from './js/icons.js';
       render();
       toast(`${g.title} now runs with ${backend}`, 'ok');
     } catch (e) {
+      render(); // put the dropdown back on the backend the library still has
       toast(errText(e), 'error');
     }
   }
