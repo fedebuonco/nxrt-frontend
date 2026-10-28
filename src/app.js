@@ -418,7 +418,7 @@ import { ICONS } from './js/icons.js';
       </section>
       <div class="issue-row">
         <button class="btn ghost sm" data-act="issue">${ICONS.bug} Report an issue…</button>
-        <span class="muted small">Opens the nxrt GitHub new-issue form with this game, its build and your macOS version filled in (no paths, no log).</span>
+        <span class="muted small">Opens the issue form for the likely project — nxrt, nxnative or nxrt-frontend — with the game, its build and your macOS version filled in (no paths, no log).</span>
       </div>
       ${
         g.build_mismatch

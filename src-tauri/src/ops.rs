@@ -247,8 +247,14 @@ fn open_browser(url: &str) -> Result<(), String> {
 
 /// Opens the prefilled new-issue URL (only the nxrt issue form is allowed).
 pub fn open_url(url: &str) -> Result<(), String> {
-    let prefix = format!("{}?", crate::issues::NEW_ISSUE);
-    if !url.starts_with(&prefix) {
+    let allowed = [
+        crate::issues::NEW_ISSUE,
+        crate::issues::FRONTEND_ISSUE,
+        crate::issues::NXNATIVE_ISSUE,
+    ]
+    .iter()
+    .any(|base| url.starts_with(&format!("{base}?")));
+    if !allowed {
         return Err("Refusing to open an unexpected URL".into());
     }
     open_browser(url)

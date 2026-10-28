@@ -77,7 +77,7 @@ export const snapshot = {
   data_dir: '/tmp/nxrt-test/root/data',
   recomps_dir: '/tmp/nxrt-test/root/recomps',
   nxrt_dir: '/tmp/nxrt-test/nxrt',
-  version: '0.1.0',
+  version: '0.2.0',
   running: 0,
   message: null,
   controls: { prompts: '', dpad_move: false, rumble: null, rumble_strength: null, led: null, bind_pad: {} },

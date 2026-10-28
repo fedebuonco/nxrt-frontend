@@ -20,8 +20,9 @@ per-game settings, updates, logs, the command line, and what the game apps answe
    - **Generate the game code**: the game's ARM code translated to C (`<app> --generate`);
    - **Compile the game code**: that C compiled into the game's library (`<app> --compile`, reusing what was generated).
 4. **Play** (`--play`); **Start screen** opens the game's own start screen (its settings and controls).
-5. **Report an issue…** on a game's page opens the nxrt GitHub new-issue form with the game, its app and build, the
-   latest manager log (a tail of it) and the environment laid out. Review it, add what happened, submit.
+5. **Report an issue…** on a game's page opens the issue form for the likely project — **nxrt**, **nxnative** or
+   **nxrt-frontend** — with the game, its app and build, the environment, and the likely component at the top. Review
+   it, move it to another repository if the guess is wrong, add what happened, submit.
 
 Each run's log is shown live and kept in `~/Library/Application Support/nxrt-frontend/logs/`.
 
@@ -151,7 +152,7 @@ nxrt-frontend --add <package.nsp | app> [--data-root <dir>]   # add a Switch gam
 nxrt-frontend --keys <prod.keys>                               # the keys games are read with
 nxrt-frontend --list                                           # every game and its steps
 nxrt-frontend --step <title id | app id> files|generate|compile|all [src]
-nxrt-frontend --issue <title id | app id>                      # print the prefilled nxrt GitHub issue URL
+nxrt-frontend --issue <title id | app id>                      # print the prefilled issue URL (likely project)
 nxrt-frontend --create <title id> [--id <id>] [--dir <folder>]  # a new recomp of a game added from its package
 ```
 

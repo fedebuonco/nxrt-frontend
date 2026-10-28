@@ -7,7 +7,54 @@ use std::path::Path;
 use std::process::Command;
 
 pub const NEW_ISSUE: &str = "https://github.com/fedebuonco/nxrt/issues/new";
+pub const FRONTEND_ISSUE: &str = "https://github.com/fedebuonco/nxrt-frontend/issues/new";
+pub const NXNATIVE_ISSUE: &str = "https://github.com/seedds/nxnative/issues/new";
 const MAX_BODY: usize = 4200;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Component {
+    Nxrt,
+    Nxnative,
+    Frontend,
+}
+
+impl Component {
+    pub fn name(self) -> &'static str {
+        match self {
+            Component::Nxrt => "nxrt",
+            Component::Nxnative => "nxnative",
+            Component::Frontend => "nxrt-frontend",
+        }
+    }
+    pub fn issue(self) -> &'static str {
+        match self {
+            Component::Nxrt => NEW_ISSUE,
+            Component::Nxnative => NXNATIVE_ISSUE,
+            Component::Frontend => FRONTEND_ISSUE,
+        }
+    }
+    fn why(self) -> &'static str {
+        match self {
+            Component::Nxrt => "the game is running on nxrt's recompiled game code",
+            Component::Nxnative => "the game is running on nxnative's native code",
+            Component::Frontend => {
+                "the nxrt-frontend manager is reading, setting up or building the game"
+            }
+        }
+    }
+}
+
+/// Which project most likely owns the failure, from the state the manager already has. This is a starting point: the
+/// player can still move the issue to another repository, and the body says so.
+pub fn component(g: &Game) -> Component {
+    if g.backend == "nxnative" {
+        return Component::Nxnative;
+    }
+    if g.load_error.is_some() || g.exe.is_none() || g.build_mismatch {
+        return Component::Frontend;
+    }
+    Component::Nxrt
+}
 
 pub struct Env {
     pub nxrt_rev: String,
@@ -79,14 +126,16 @@ pub fn for_game(g: &Game, nxrt_dir: &Path) -> String {
 }
 
 pub fn url(g: &Game, env: &Env) -> String {
+    let c = component(g);
     let title = if g.title.trim().is_empty() {
         "nxrt".to_string()
     } else {
         g.title.trim().to_string()
     };
     format!(
-        "{NEW_ISSUE}?title={}&body={}",
-        enc(&format!("[{title}] ")),
+        "{}?title={}&body={}",
+        c.issue(),
+        enc(&format!("[{}] [{title}] ", c.name())),
         enc(&body(g, env))
     )
 }
@@ -113,12 +162,15 @@ fn body(g: &Game, env: &Env) -> String {
         row(&mut s, "Last run", &e.text);
     }
 
+    let c = component(g);
+    s.push_str(&format!("\n### Likely component\n\n**{}** — {}. Change the repository if this is the other project.\n\n", c.name(), c.why()));
     s.push_str("\n### What happened?\n<!-- What did you do, what did you expect, and what happened instead? -->\n\n");
     s.push_str("\n### Steps to reproduce\n1. \n2. \n\n");
     s.push_str("### Logs\n<!-- Optional: drag the game's log here (the manager's Logs page opens their folder). -->\n\n");
     s.push_str("\n### Environment\n");
     s.push_str(&format!("- nxrt: `{}`\n", env.nxrt_rev));
     s.push_str(&format!("- nxrt-frontend: `{}`\n", env.manager));
+    s.push_str(&format!("- Likely component: `{}`\n", c.name()));
     s.push_str(&format!("- macOS: `{}` ({})\n", env.macos, env.arch));
     s.push_str("\n<!-- Opened from nxrt-frontend. -->\n");
     if s.chars().count() > MAX_BODY {
@@ -167,6 +219,7 @@ mod tests {
             app_version: "dev".into(),
             exe: Some("/tmp/test-app".into()),
             package: Some("/tmp/Test Game.nsp".into()),
+            backend: "nxrt".into(),
             state: "Ready to play".into(),
             describe: Some(DescribeInfo {
                 id: "fake".into(),
@@ -213,6 +266,7 @@ mod tests {
         assert!(b.contains("### What happened?"));
         assert!(b.contains("### Steps to reproduce"));
         assert!(b.contains("nxrt: `9c58ea9`"));
+        assert!(b.contains("| **Likely component**") || b.contains("### Likely component"));
         assert!(b.contains("macOS: `15.0` (arm64)"));
         assert!(b.contains("Opened from nxrt-frontend"));
         for path in ["/tmp", "/Users", "someone"] {
@@ -221,10 +275,27 @@ mod tests {
     }
 
     #[test]
+    fn component_follows_the_backend_and_the_manager_state() {
+        let mut g = game();
+        assert_eq!(component(&g), Component::Nxrt);
+        assert!(url(&g, &env()).contains("github.com/fedebuonco/nxrt/issues/new"));
+        g.backend = "nxnative".into();
+        assert_eq!(component(&g), Component::Nxnative);
+        assert!(url(&g, &env()).contains("github.com/seedds/nxnative/issues/new"));
+        let mut g = game();
+        g.exe = None;
+        assert_eq!(component(&g), Component::Frontend);
+        assert!(url(&g, &env()).contains("github.com/fedebuonco/nxrt-frontend/issues/new"));
+        let mut g = game();
+        g.build_mismatch = true;
+        assert_eq!(component(&g), Component::Frontend);
+    }
+
+    #[test]
     fn url_is_a_new_issue_query() {
         let u = url(&game(), &env());
         assert!(u.starts_with("https://github.com/fedebuonco/nxrt/issues/new?title="));
-        assert!(u.contains("%5BTest%20Game%5D%20"));
+        assert!(u.contains("%5Bnxrt%5D%20%5BTest%20Game%5D%20"));
         assert!(u.contains("&body="));
         assert!(!u.contains('\n'));
         assert!(!u.contains("%2Ftmp"), "no paths");
