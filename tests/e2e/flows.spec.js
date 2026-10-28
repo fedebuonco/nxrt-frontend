@@ -166,13 +166,36 @@ test('the backend switch changes what runs the game', async ({ page }) => {
   switched.games[0].backend = 'nxnative';
   await open(page, { set_backend: switched });
   await openDemo(page);
-  const nxrt = page.locator('[data-act="backend"][data-backend="nxrt"]');
-  const nxn = page.locator('[data-act="backend"][data-backend="nxnative"]');
-  await expect(nxrt).toHaveAttribute('aria-pressed', 'true');
-  await nxn.click();
+  const picker = page.locator('select[data-act="backend"]');
+  await expect(picker).toHaveValue('nxrt');
+  await picker.selectOption('nxnative');
   await expect
     .poll(async () => (await calls(page, 'set_backend')).map((c) => c.args))
     .toEqual([{ key: demo.key, backend: 'nxnative' }]);
-  await expect(nxn).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker).toHaveValue('nxnative');
   await expect(page.locator('.toast.ok')).toContainText('now runs with nxnative');
+});
+
+test('the backend switch is a dropdown with every offered backend', async ({ page }) => {
+  await open(page);
+  await openDemo(page);
+  const picker = page.locator('select[data-act="backend"]');
+  await expect(picker.locator('option')).toHaveText(['nxrt', 'nxnative']);
+  await expect(picker).toHaveAttribute('aria-label', 'Backend');
+});
+
+test('the backend switch is disabled while the game runs', async ({ page }) => {
+  const running = structuredClone(snapshot);
+  running.games[0].running = { playing: true };
+  await open(page, {}, running);
+  await openDemo(page);
+  await expect(page.locator('select[data-act="backend"]')).toBeDisabled();
+});
+
+test('a game with one backend has no switch', async ({ page }) => {
+  const one = structuredClone(snapshot);
+  one.games[0].backends = ['nxrt'];
+  await open(page, {}, one);
+  await openDemo(page);
+  await expect(page.locator('select[data-act="backend"]')).toHaveCount(0);
 });

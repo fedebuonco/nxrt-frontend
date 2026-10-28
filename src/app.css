@@ -1988,3 +1988,25 @@ body.pad-on .page {
 .backend-switch .muted {
   margin-right: 4px;
 }
+.backend-select {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 26px 5px 9px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--sub) 50%), linear-gradient(135deg, var(--sub) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 8px) 50%;
+  background-size:
+    4px 4px,
+    4px 4px;
+  background-repeat: no-repeat;
+}
+.backend-select:disabled {
+  opacity: 0.55;
+}

@@ -440,15 +440,12 @@ import { ICONS } from './js/icons.js';
     const all = g.backends || [];
     if (all.length < 2) return '';
     const names = { nxrt: 'nxrt', nxnative: 'nxnative' };
-    const btns = all
-      .map(
-        (b) =>
-          `<button class="btn ${b === g.backend ? 'primary' : 'secondary'} sm" data-act="backend" data-backend="${esc(b)}" ${
-            g.running ? 'disabled' : ''
-          } aria-pressed="${b === g.backend}">${esc(names[b] || b)}</button>`,
-      )
+    const opts = all
+      .map((b) => `<option value="${esc(b)}" ${b === g.backend ? 'selected' : ''}>${esc(names[b] || b)}</option>`)
       .join('');
-    return `<div class="backend-switch"><span class="muted small">Runs with</span>${btns}</div>`;
+    return `<label class="backend-switch"><span class="muted small">Runs with</span><select class="backend-select" data-act="backend" aria-label="Backend" ${
+      g.running ? 'disabled' : ''
+    }>${opts}</select></label>`;
   }
 
   function heroActions(g) {
@@ -2235,7 +2232,7 @@ import { ICONS } from './js/icons.js';
         return;
       }
       const actEl = e.target.closest('[data-act]');
-      if (actEl) {
+      if (actEl && actEl.tagName !== 'SELECT') {
         e.preventDefault();
         doAct(actEl.dataset.act, actEl);
         return;
@@ -2245,6 +2242,11 @@ import { ICONS } from './js/icons.js';
     });
 
     document.addEventListener('change', (e) => {
+      if (e.target.matches('select[data-act="backend"]')) {
+        const g = game();
+        if (g) setBackend(g, e.target.value);
+        return;
+      }
       if (e.target.id === 'manager-follow') {
         S.managerFollow = e.target.checked;
         scheduleManager();
