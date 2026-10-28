@@ -61,6 +61,8 @@ jobs:
           uname -m
           test "$(uname -m)" = arm64
       - run: npm ci
+      - name: Stage the nxrt submodule
+        run: sh scripts/bundle-nxrt.sh
       - name: Rust checks
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
