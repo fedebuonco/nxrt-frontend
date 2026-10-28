@@ -16,9 +16,13 @@ game's files and game code, and Play.
   beside it.
 - **Controller-first.** Menus, hints and a controller map that lights each button; bind once globally, override per
   game.
-- **Logs that help.** Every run is kept; a game's **Report an issue…** opens a prefilled nxrt issue with the game's
-  ids and versions and your macOS version: no paths, no log (attach one yourself if you like).
+- **Logs that help.** Every run is kept; a game's **Report an issue…** opens a prefilled issue for the likely
+  project — nxrt, nxnative or nxrt-frontend — with the game's ids and versions and your macOS version: no paths, no
+  log (attach one yourself if you like).
 - **Batteries included.** The nxrt source is built into the app, so creating a recomp needs no checkout.
+- **Two backends, one library.** A game runs on nxrt (its recomp) or on [nxnative](https://github.com/seedds/nxnative)
+  (the game's own code on this Mac, built from its NSPs); the game page's **Runs with nxrt | nxnative** switch picks, per
+  game, and a game can keep both.
 
 ![A game's page](docs/screenshots/game.png)
 

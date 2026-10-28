@@ -19,6 +19,7 @@ src-tauri/src/
   commands.rs            the window's commands + the run monitor
   api.rs                 serialisable models gathered from the game's app
   library.rs runner.rs controls.rs pads.rs issues.rs logging.rs update.rs ...
+  nxnative.rs            the second backend: its checkout, its build folder, its build and run commands
   build.rs               builds libnxrt_manage from the nxrt submodule
 vite.config.js           root src/, output web-dist/, dev port 1420
 ```
@@ -59,6 +60,9 @@ The `create-tauri-app` templates and the Tauri docs converge on:
   page. Moving to the official plugin needs signed artifacts and a public update endpoint.
 - **One `commands.rs`.** It is cohesive (the snapshot plus the run lifecycle) at this size; the domain modules around it
   (library, runner, controls, issues, update) already carry the real logic.
+- **A backend per game.** The backend is a field of the game's library entry: `api::view` dispatches to `view_nxrt` or
+  `view_nxnative` (and says which backends the game offers), `commands.rs` to the matching start, and the window renders
+  one switch. Everything else in the app sees a game like any other.
 
 ## Next steps, in order
 

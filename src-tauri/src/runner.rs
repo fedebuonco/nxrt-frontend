@@ -9,6 +9,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 /// `<exe> --describe` (runtime/rt_ui.mm rt_print_describe)
+#[allow(dead_code)] // (the nxrt app protocol: the nxnative backend does not ask it)
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Describe {
     pub id: String,
@@ -29,6 +30,7 @@ pub struct Describe {
 }
 
 /// `<exe> --status` (runtime/rt_ui.mm rt_print_status)
+#[allow(dead_code)] // (the nxrt app protocol: the nxnative backend does not ask it)
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Status {
     pub data_root: String,
@@ -201,6 +203,8 @@ pub enum Kind {
     DevBuild,
     /// a new recomp's app being built (its build.sh: ::step lines)
     Create,
+    /// a game built for this Mac by nxnative's script (nxnative.rs: its JSON progress events)
+    NxBuild,
 }
 
 /// The steps from a game package to a game that plays (runtime/rt_ui.mm rt_run_setup).
@@ -236,12 +240,99 @@ struct ProgressLine {
     step: String,
 }
 
+/// One JSON event of nxnative's build (build_ipa_from_nsp.py --progress json: stage, step, progress, stage_end, say)
+/// into the progress; returns the line for the log, if it has one.
+fn nx_event(progress: &Mutex<Progress>, line: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let n = |k: &str| v.get(k).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let mut g = progress.lock().unwrap();
+    let head = |g: &Progress, name: &str, step: &str| {
+        let (k, n) = g.nx_stage;
+        let t = if n > 0 {
+            format!("[{k}/{n}] {name}")
+        } else {
+            name.to_string()
+        };
+        if step.is_empty() {
+            t
+        } else {
+            format!("{t} · {step}")
+        }
+    };
+    match s("ev").as_str() {
+        "stage" => {
+            g.nx_stage = (n("k"), n("n").max(1));
+            let (k, n) = g.nx_stage;
+            g.fraction = Some(k.saturating_sub(1) as f32 / n as f32);
+            g.step = head(&g, &s("name"), &s("step"));
+            Some(format!("▸ {}", g.step))
+        }
+        "step" => {
+            g.step = head(&g, &s("name"), &s("step"));
+            None
+        }
+        "progress" => {
+            let (k, n) = g.nx_stage;
+            if let (Some(f), true) = (v.get("frac").and_then(|x| x.as_f64()), n > 0) {
+                g.fraction = Some((k.saturating_sub(1) as f32 + f as f32) / n as f32);
+            }
+            g.step = head(&g, &s("name"), &s("step"));
+            None
+        }
+        "stage_end" => {
+            let ok = v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true);
+            let summary = s("summary");
+            if !ok {
+                g.failed = Some(if summary.is_empty() {
+                    s("name")
+                } else {
+                    format!("{}: {summary}", s("name"))
+                });
+            }
+            let tail = if summary.is_empty() {
+                String::new()
+            } else {
+                format!(": {summary}")
+            };
+            Some(format!(
+                "{} {}{tail}",
+                if ok { "✓" } else { "✗" },
+                s("name")
+            ))
+        }
+        "say" => {
+            let msg = s("msg");
+            if g.nx_run_next {
+                g.nx_run_next = false;
+                g.run_cmd = Some(msg.clone());
+            } else if msg.contains(crate::nxnative::RUN_COMMAND_FOLLOWS) {
+                g.nx_run_next = true;
+            } else if g.failed.is_none() {
+                // (a red line is what went wrong: the script says it before it stops)
+                if let Some(at) = msg.find("[RED] ") {
+                    g.failed = Some(msg[at + 6..].to_string());
+                }
+            }
+            Some(msg)
+        }
+        _ => Some(line.to_string()),
+    }
+}
+
 /// How far a setup or build is (from its progress lines), and its result once it has one.
 #[derive(Clone, Debug, Default)]
 pub struct Progress {
     pub fraction: Option<f32>,
     pub step: String,
     pub result: Option<SetupResult>,
+    /// an nxnative build: the command that runs the game, which the script prints at the end
+    pub run_cmd: Option<String>,
+    /// an nxnative build: the stage that failed and its summary
+    pub failed: Option<String>,
+    /// an nxnative build: the stage running (k of n), for the overall fraction
+    nx_stage: (u32, u32),
+    nx_run_next: bool,
 }
 
 /// A running game, setup or build.
@@ -323,6 +414,40 @@ impl Run {
         Run::spawn(c, dir, Kind::DevBuild, log_file, repaint)
     }
 
+    /// A game built for this Mac by nxnative's script, from its NSP folder (nxnative.rs).
+    pub fn nx_build(
+        repo: &Path,
+        nsp_dir: &Path,
+        keys: &Path,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
+        let mut c = Command::new(crate::nxnative::python(repo));
+        c.arg(repo.join("scripts/build_ipa_from_nsp.py"))
+            .arg(nsp_dir)
+            .arg("-k")
+            .arg(keys)
+            .args(["--platform", "mac", "--progress", "json"])
+            .env("PATH", crate::nxnative::tool_path())
+            .current_dir(repo);
+        if let Some(sdk) = crate::nxnative::sdk_root() {
+            c.env("SDKROOT", sdk);
+        }
+        Run::spawn(c, nsp_dir, Kind::NxBuild, log_file, repaint)
+    }
+
+    /// The game in nxnative's host: the command its build printed (it sets the host's environment and runs it).
+    pub fn nx_game(
+        cmd: &str,
+        dir: &Path,
+        log_file: Option<PathBuf>,
+        repaint: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Run, String> {
+        let mut c = Command::new("/bin/sh");
+        c.arg("-c").arg(cmd).current_dir(dir);
+        Run::spawn(c, dir, Kind::Game, log_file, repaint)
+    }
+
     /// A new recomp's build (recomp.rs: its build.sh), in its folder.
     pub fn create(
         dir: &Path,
@@ -348,7 +473,9 @@ impl Run {
             c.env("NXRT_LOG", level);
         }
         tracing::debug!(target: "run", run = %run_id, exe = %what.display(), kind = ?kind, "spawning");
-        if kind != Kind::DevBuild && kind != Kind::Create {
+        // (an nxrt app starts in its own folder; nxnative's run command and builds set their own)
+        if kind != Kind::DevBuild && kind != Kind::Create && kind != Kind::NxBuild && what.is_file()
+        {
             if let Some(dir) = what.parent() {
                 c.current_dir(dir);
             }
@@ -413,6 +540,10 @@ impl Run {
                     {
                         if let Ok(r) = serde_json::from_str::<SetupResult>(&line) {
                             progress.lock().unwrap().result = Some(r);
+                        }
+                    } else if kind == Kind::NxBuild && line.starts_with('{') {
+                        if let Some(msg) = nx_event(&progress, &line) {
+                            push(&log, msg);
                         }
                     } else if kind == Kind::Create && line.starts_with("::step ") {
                         progress.lock().unwrap().step = line[7..].to_string();
@@ -708,6 +839,70 @@ echo "args: $*""#,
     }
 
     #[test]
+    fn an_nxnative_game_runs_its_command_in_its_folder() {
+        let d = scratch("nx-env");
+        let cmd = "DM_WINDOW=1 sh -c 'echo \"win=$DM_WINDOW run=$NXRT_RUN_ID pwd=$(pwd -P)\"'";
+        let mut run = Run::nx_game(cmd, &d, None, || {}).unwrap();
+        assert_eq!(wait_exit(&mut run), "closed");
+        let want = format!(
+            "win=1 run={} pwd={}",
+            run.run_id,
+            std::fs::canonicalize(&d).unwrap().display()
+        );
+        wait_for(|| run.log.lock().unwrap().iter().any(|l| *l == want));
+    }
+
+    #[test]
+    fn nxnative_events_make_the_progress_and_the_run_command() {
+        let p = Mutex::new(Progress::default());
+        let ev = |l: &str| nx_event(&p, l);
+        assert_eq!(
+            ev(r#"{"ev":"stage","k":2,"n":4,"name":"Rewrite","step":""}"#).as_deref(),
+            Some("▸ [2/4] Rewrite")
+        );
+        assert_eq!(p.lock().unwrap().fraction, Some(0.25));
+        ev(
+            r#"{"ev":"progress","k":2,"name":"Rewrite","step":"main","done":1,"total":2,"frac":0.5}"#,
+        );
+        assert_eq!(p.lock().unwrap().fraction, Some(0.375));
+        assert_eq!(p.lock().unwrap().step, "[2/4] Rewrite · main");
+        ev(r#"{"ev":"stage_end","k":2,"name":"Shaders","ok":false,"summary":"3 failed"}"#);
+        assert_eq!(
+            p.lock().unwrap().failed.as_deref(),
+            Some("Shaders: 3 failed")
+        );
+        ev(
+            r#"{"ev":"say","msg":"[12:00:00] done: the game runs on the Mac with this command (its save in /x):"}"#,
+        );
+        assert!(p.lock().unwrap().run_cmd.is_none());
+        ev(r#"{"ev":"say","msg":"cd /x/run && DM_ROMFS=/x/RomFS /x/tools/dmhost /x/patched_v0"}"#);
+        assert_eq!(
+            p.lock().unwrap().run_cmd.as_deref(),
+            Some("cd /x/run && DM_ROMFS=/x/RomFS /x/tools/dmhost /x/patched_v0")
+        );
+        // (a red line is what went wrong, the first one)
+        let q = Mutex::new(Progress::default());
+        nx_event(
+            &q,
+            r#"{"ev":"say","msg":"[RED] more than one game in the folder, keep one game per folder: A, B"}"#,
+        );
+        nx_event(&q, r#"{"ev":"say","msg":"[RED] later"}"#);
+        assert_eq!(
+            q.lock().unwrap().failed.as_deref(),
+            Some("more than one game in the folder, keep one game per folder: A, B")
+        );
+        // (a later message is only a message)
+        ev(r#"{"ev":"say","msg":"profile: registered"}"#);
+        assert!(p
+            .lock()
+            .unwrap()
+            .run_cmd
+            .as_deref()
+            .unwrap()
+            .ends_with("patched_v0"));
+    }
+
+    #[test]
     fn create_steps_are_progress_not_log() {
         let d = scratch("create");
         std::fs::write(
@@ -747,11 +942,9 @@ echo "args: $*""#,
     #[test]
     fn a_crash_and_an_exit_code_read_as_such() {
         let d = scratch("crash");
-        let exe = app(&d, "kill -SEGV $$");
-        let mut run = Run::game(&exe, None, false, None, || {}, None).unwrap();
+        let mut run = Run::nx_game("kill -SEGV $$", &d, None, || {}).unwrap();
         assert_eq!(wait_exit(&mut run), "crashed (signal 11 SIGSEGV)");
-        let exe = app(&d, "exit 3");
-        let mut run = Run::game(&exe, None, false, None, || {}, None).unwrap();
+        let mut run = Run::nx_game("exit 3", &d, None, || {}).unwrap();
         assert_eq!(wait_exit(&mut run), "exited with code 3");
     }
 }

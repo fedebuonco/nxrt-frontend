@@ -142,3 +142,115 @@ for (const [kind, want] of [
       .toEqual([{ key: demo.key, ...want }]);
   });
 }
+
+test('an nxnative game is built for Mac, then played', async ({ page }) => {
+  const snap = structuredClone(snapshot);
+  Object.assign(snap.games[0], {
+    backend: 'nxnative',
+    ready: false,
+    state: 'Next: build it for this Mac',
+    tone: 'warn',
+    steps: { files: false, generated: false, code: false, builder: false, dev: true },
+    next: { label: 'Build for Mac', kind: 'build', primary: true },
+  });
+  await open(page, {}, snap);
+  await openDemo(page);
+  await expect(page.locator('.steps .name').nth(1)).toHaveText('Build for Mac');
+  await expect(page.locator('[data-act="start-screen"]')).toHaveCount(0);
+  await page.locator('.steps [data-act="next"]').click();
+  await expect.poll(async () => (await calls(page, 'start_dev')).map((c) => c.args)).toEqual([{ key: demo.key }]);
+});
+
+test('the backend switch changes what runs the game', async ({ page }) => {
+  const switched = structuredClone(snapshot);
+  switched.games[0].backend = 'nxnative';
+  await open(page, { set_backend: switched });
+  await openDemo(page);
+  const picker = page.locator('select[data-act="backend"]');
+  await expect(picker).toHaveValue('nxrt');
+  await picker.selectOption('nxnative');
+  await expect
+    .poll(async () => (await calls(page, 'set_backend')).map((c) => c.args))
+    .toEqual([{ key: demo.key, backend: 'nxnative' }]);
+  await expect(picker).toHaveValue('nxnative');
+  await expect(page.locator('.toast.ok')).toContainText('now runs with nxnative');
+});
+
+test('a backend switch that fails says why and keeps the old backend', async ({ page }) => {
+  await open(page, { set_backend: { __error: 'nxnative needs the game NSP' } });
+  await openDemo(page);
+  const picker = page.locator('select[data-act="backend"]');
+  await picker.selectOption('nxnative');
+  await expect(page.locator('.toast.error')).toContainText('needs the game NSP');
+  await expect(picker).toHaveValue('nxrt');
+});
+
+test('the backend switch is a dropdown with every offered backend', async ({ page }) => {
+  await open(page);
+  await openDemo(page);
+  const picker = page.locator('select[data-act="backend"]');
+  await expect(picker.locator('option')).toHaveText(['nxrt', 'nxnative']);
+  await expect(picker).toHaveAttribute('aria-label', 'Backend');
+});
+
+test('the backend choice survives a window reload', async ({ page }) => {
+  const switched = structuredClone(snapshot);
+  switched.games[0].backend = 'nxnative';
+  await open(page, { set_backend: switched });
+  await openDemo(page);
+  await page.locator('select[data-act="backend"]').selectOption('nxnative');
+  await expect(page.locator('select[data-act="backend"]')).toHaveValue('nxnative');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  await openDemo(page);
+  await expect(page.locator('select[data-act="backend"]')).toHaveValue('nxnative');
+});
+
+test('the backend switch is disabled while the game runs', async ({ page }) => {
+  const running = structuredClone(snapshot);
+  running.games[0].running = { playing: true };
+  await open(page, {}, running);
+  await openDemo(page);
+  await expect(page.locator('select[data-act="backend"]')).toBeDisabled();
+});
+
+test('a game with one backend has no switch', async ({ page }) => {
+  const one = structuredClone(snapshot);
+  one.games[0].backends = ['nxrt'];
+  await open(page, {}, one);
+  await openDemo(page);
+  await expect(page.locator('select[data-act="backend"]')).toHaveCount(0);
+});
+
+test('the folders setting shows the central layout and scans games', async ({ page }) => {
+  const scanned = structuredClone(snapshot);
+  await open(page, { scan_games: { snapshot: scanned, found: 3, added: 1 } });
+  await page.locator('[data-nav="settings"]').click();
+  await expect(page.getByText('/tmp/nxrt-test/root/games')).toBeVisible();
+  await expect(page.getByText('/tmp/nxrt-test/root/data')).toBeVisible();
+  await page.getByRole('button', { name: 'Scan games folder' }).click();
+  await expect.poll(async () => (await calls(page, 'scan_games')).length).toBe(1);
+  await expect(page.locator('.toast.ok')).toContainText('added 1');
+});
+
+test('choosing the nxrt root stores it', async ({ page }) => {
+  const moved = structuredClone(snapshot);
+  moved.root_dir = '/Volumes/Games/nxrt';
+  moved.games_dir = '/Volumes/Games/nxrt/games';
+  moved.data_dir = '/Volumes/Games/nxrt/data';
+  moved.recomps_dir = '/Volumes/Games/nxrt/recomps';
+  await open(page, { pick_root: '/Volumes/Games/nxrt', set_root: moved });
+  await page.locator('[data-nav="settings"]').click();
+  await page.getByRole('button', { name: 'Choose root…' }).click();
+  await expect
+    .poll(async () => (await calls(page, 'set_root')).map((c) => c.args))
+    .toEqual([{ path: '/Volumes/Games/nxrt' }]);
+  await expect(page.getByText('/Volumes/Games/nxrt/data')).toBeVisible();
+  await expect(page.locator('.toast.ok')).toContainText('folder set');
+});
+
+test('a scan failure says why', async ({ page }) => {
+  await open(page, { scan_games: { __error: 'No prod.keys' } });
+  await page.getByRole('button', { name: 'Scan games folder' }).click();
+  await expect(page.locator('.toast.error')).toContainText('No prod.keys');
+});

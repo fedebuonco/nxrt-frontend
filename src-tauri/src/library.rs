@@ -52,10 +52,48 @@ pub struct Entry {
     /// controller settings for this game, layered over the library's defaults (controls.rs)
     #[serde(default, skip_serializing_if = "Controls::is_empty")]
     pub controls: Controls,
+    /// which backend runs this game: nxrt (its recomp app) or nxnative (its Mac build); the window switches it
+    #[serde(default, skip_serializing_if = "Backend::is_nxrt")]
+    pub backend: Backend,
+    /// nxnative: the command that runs the game, as its Mac build printed it (nxnative.rs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_cmd: Option<String>,
+}
+
+/// What runs a game: an nxrt recomp (its own app, built from the game's code translated to C), or nxnative (the
+/// game's own code run natively in nxnative's host, github.com/seedds/nxnative).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    #[default]
+    Nxrt,
+    Nxnative,
+}
+
+impl Backend {
+    pub fn is_nxrt(&self) -> bool {
+        *self == Backend::Nxrt
+    }
+    pub fn name(&self) -> &'static str {
+        match self {
+            Backend::Nxrt => "nxrt",
+            Backend::Nxnative => "nxnative",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Backend> {
+        match s {
+            "nxrt" => Some(Backend::Nxrt),
+            "nxnative" => Some(Backend::Nxnative),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Library {
+    /// one root for the manager's games, per-game data and recomp builds. None: the default (~/nxrt).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<PathBuf>,
     /// the player's keys file (prod.keys) the toolbar chose: used before one beside a package or in ~/.switch
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keys: Option<PathBuf>,
@@ -64,6 +102,9 @@ pub struct Library {
     pub controls: Controls,
     #[serde(default, rename = "game")]
     pub games: Vec<Entry>,
+    /// the nxnative checkout (nxnative.rs repo: NXNATIVE_DIR, else this, else the SSD's development volume)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nxnative_dir: Option<PathBuf>,
     /// (not saved) the library file could not be read: where it was moved, so nothing overwrites it
     #[serde(skip)]
     pub load_error: Option<String>,
@@ -83,6 +124,13 @@ pub fn check_keys(p: &Path) -> Result<(), String> {
             p.display()
         ))
     }
+}
+
+/// The root used when the library has none: `~/nxrt` (falls back to the config folder).
+pub fn default_root() -> PathBuf {
+    dirs::home_dir()
+        .map(|h| h.join("nxrt"))
+        .unwrap_or_else(|| dir().join("nxrt"))
 }
 
 pub fn dir() -> PathBuf {
@@ -164,6 +212,42 @@ impl Library {
         std::fs::rename(&tmp, &p).map_err(|e| format!("{}: {e}", p.display()))
     }
 
+    /// The one root the manager works in. A stored root wins; otherwise `~/nxrt`.
+    pub fn root_dir(&self) -> PathBuf {
+        self.root.clone().unwrap_or_else(default_root)
+    }
+    pub fn games_dir(&self) -> PathBuf {
+        self.root_dir().join("games")
+    }
+    pub fn data_dir(&self) -> PathBuf {
+        self.root_dir().join("data")
+    }
+    pub fn recomps_dir(&self) -> PathBuf {
+        self.root_dir().join("recomps")
+    }
+
+    /// Where a game's per-game data (game files, saves, settings, mods) lives under the central root.
+    pub fn data_root_for(&self, entry: &Entry) -> PathBuf {
+        let id = if !entry.title_id.is_empty() {
+            entry.title_id.trim().to_ascii_lowercase()
+        } else if !entry.name.is_empty() {
+            entry
+                .name
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect()
+        } else {
+            "game".to_string()
+        };
+        self.data_dir().join(id)
+    }
+
     pub fn add_app(&mut self, exe: &Path, data_root: Option<PathBuf>) -> bool {
         if self.games.iter().any(|g| g.exe.as_deref() == Some(exe)) {
             return false;
@@ -214,6 +298,41 @@ mod tests {
             back.games[0].exe.as_deref(),
             Some(Path::new("/tmp/nxrt-test-app"))
         );
+    }
+
+    #[test]
+    fn one_root_derives_games_data_and_recomps() {
+        let lib = Library {
+            root: Some(PathBuf::from("/central")),
+            ..Default::default()
+        };
+        assert_eq!(lib.games_dir(), Path::new("/central/games"));
+        assert_eq!(lib.data_dir(), Path::new("/central/data"));
+        assert_eq!(lib.recomps_dir(), Path::new("/central/recomps"));
+        let e = Entry {
+            title_id: "0100ABCD".into(),
+            ..Default::default()
+        };
+        assert_eq!(lib.data_root_for(&e), Path::new("/central/data/0100abcd"));
+        let named = Entry {
+            name: "My Game!".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            lib.data_root_for(&named),
+            Path::new("/central/data/my-game-")
+        );
+    }
+
+    #[test]
+    fn backend_names_round_trip_and_unknown_names_are_rejected() {
+        for b in [Backend::Nxrt, Backend::Nxnative] {
+            assert_eq!(Backend::parse(b.name()), Some(b));
+        }
+        assert_eq!(Backend::parse(""), None);
+        assert_eq!(Backend::parse("Metal"), None);
+        assert!(Backend::Nxrt.is_nxrt());
+        assert!(!Backend::Nxnative.is_nxrt());
     }
 
     #[test]

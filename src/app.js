@@ -347,6 +347,7 @@ import { ICONS } from './js/icons.js';
         </div>
         <div class="actions">
           <button class="btn ghost" data-act="refresh">Refresh</button>
+          <button class="btn secondary" data-act="scan-games">Scan games folder</button>
           <button class="btn secondary" data-act="add-app">Add an nxrt app</button>
           <button class="btn primary" data-act="add-game">${ICONS.plus} Add a Switch game</button>
         </div>
@@ -363,9 +364,9 @@ import { ICONS } from './js/icons.js';
     const btn = n
       ? `<button class="btn ${n.primary ? 'primary' : 'outline'} sm" data-act="next" data-key="${esc(g.key)}">${esc(shortLabel(n.label))}</button>`
       : `<button class="btn secondary sm" data-act="open" data-key="${esc(g.key)}">Open</button>`;
-    return `<article class="game-card" data-card="${esc(g.key)}" tabindex="0" role="button" aria-label="${esc(g.title)}">
+    return `<article class="game-card" data-card="${esc(g.key)}" aria-label="${esc(g.title)}">
       ${cover(g)}
-      <div class="title">${esc(g.title || 'Unknown game')}</div>
+      <button class="title" data-act="open" data-key="${esc(g.key)}">${esc(g.title || 'Unknown game')}</button>
       <div class="meta" title="${esc(metaLine(g))}">${esc(metaLine(g))}</div>
       <div class="foot">
         <span class="state ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i><span class="txt" title="${esc(state)}">${esc(state)}</span></span>
@@ -411,12 +412,13 @@ import { ICONS } from './js/icons.js';
           <h1>${esc(g.title)}</h1>
           <div class="meta" title="${esc(heroMeta(g))}">${esc(heroMeta(g))}</div>
           <div class="js-hero-pill">${pill(state, tone)}</div>
+          ${backendSwitch(g)}
           <div class="actions">${heroActions(g)}</div>
         </div>
       </section>
       <div class="issue-row">
         <button class="btn ghost sm" data-act="issue">${ICONS.bug} Report an issue…</button>
-        <span class="muted small">Opens the nxrt GitHub new-issue form with this game, its build and your macOS version filled in (no paths, no log).</span>
+        <span class="muted small">Opens the issue form for the likely project — nxrt, nxnative or nxrt-frontend — with the game, its build and your macOS version filled in (no paths, no log).</span>
       </div>
       ${
         g.build_mismatch
@@ -434,10 +436,25 @@ import { ICONS } from './js/icons.js';
     </div>`;
   }
 
+  // Which backend runs the game: nxrt (its recomp app) or nxnative (its Mac build, github.com/seedds/nxnative).
+  function backendSwitch(g) {
+    const all = g.backends || [];
+    if (all.length < 2) return '';
+    const names = { nxrt: 'nxrt', nxnative: 'nxnative' };
+    const opts = all
+      .map((b) => `<option value="${esc(b)}" ${b === g.backend ? 'selected' : ''}>${esc(names[b] || b)}</option>`)
+      .join('');
+    return `<label class="backend-switch"><span class="muted small">Runs with</span><select class="backend-select" data-act="backend" aria-label="Backend" ${
+      g.running ? 'disabled' : ''
+    }>${opts}</select></label>`;
+  }
+
   function heroActions(g) {
     if (g.running) return `<button class="btn secondary" data-act="stop">${ICONS.stop} Stop</button>`;
     if (!g.exe) return '';
-    return `<button class="btn primary" data-act="play" ${g.ready ? '' : 'disabled'}>${ICONS.play} Play</button>
+    const play = `<button class="btn primary" data-act="play" ${g.ready ? '' : 'disabled'}>${ICONS.play} Play</button>`;
+    if (g.backend === 'nxnative') return play;
+    return `${play}
       <button class="btn secondary" data-act="start-screen">${ICONS.screen} Start screen</button>`;
   }
 
@@ -471,11 +488,15 @@ import { ICONS } from './js/icons.js';
         <span class="small">${done} of ${steps.length} done</span>
         <span class="spacer"></span>
         <div class="menu">
-          <button class="btn secondary sm" data-act="menu">Set up again ${ICONS.chevron}</button>
+          <button class="btn secondary sm" data-act="menu">${g.backend === 'nxnative' ? 'Build again' : 'Set up again'} ${ICONS.chevron}</button>
           <div class="menu-pop" hidden>
-            <button data-act="setup-package">From a game package (.nsp / .xci)…</button>
+            ${
+              g.backend === 'nxnative'
+                ? '<button data-act="nx-build">Build for Mac again</button>'
+                : `<button data-act="setup-package">From a game package (.nsp / .xci)…</button>
             <button data-act="setup-folder">From a folder (exefs + romfs)…</button>
-            ${g.steps.files ? '<button data-act="rebuild">Generate and compile again</button>' : ''}
+            ${g.steps.files ? '<button data-act="rebuild">Generate and compile again</button>' : ''}`
+            }
           </div>
         </div>
       </div>
@@ -518,13 +539,16 @@ import { ICONS } from './js/icons.js';
         stage: 'compile',
       });
     } else {
+      const nx = g.backend === 'nxnative';
       list.push({
-        title: 'Build the game code',
-        detail: "This app's Dev build command",
+        title: nx ? 'Build for Mac' : 'Build the game code',
+        detail: nx
+          ? "nxnative's build: the game's code rewritten for this Mac, its shaders translated to Metal, the host built"
+          : "This app's Dev build command",
         done: g.steps.code,
         running: r.kind === 'all' || r.kind === 'build',
         next: n.kind === 'build',
-        label: 'Build',
+        label: nx ? 'Build for Mac' : 'Build',
         stage: 'build',
       });
     }
@@ -827,7 +851,7 @@ import { ICONS } from './js/icons.js';
     };
     const group = (title, rows) =>
       `<div class="pad-group"><div class="pad-group-title">${title}</div><ul>${rows.join('')}</ul></div>`;
-    return `<div class="pad-groups" role="list" aria-label="Controller buttons and the inputs they send">
+    return `<div class="pad-groups">
       ${group('Face buttons', [row('south', L.south, 'Bottom'), row('east', L.east, 'Right'), row('west', L.west, 'Left'), row('north', L.north, 'Top')])}
       ${group('Shoulders', [row('lshoulder', 'LB', 'Left bumper'), row('rshoulder', 'RB', 'Right bumper'), row('ltrigger', 'LT', 'Left trigger'), row('rtrigger', 'RT', 'Right trigger')])}
       ${group('D-pad', [row('dpad_up', '↑', 'Up'), row('dpad_down', '↓', 'Down'), row('dpad_left', '←', 'Left'), row('dpad_right', '→', 'Right')])}
@@ -1102,6 +1126,16 @@ import { ICONS } from './js/icons.js';
         </section>
         <section class="card setting">
           <div class="setting-head">
+            <span class="section-title">Folders</span><span class="spacer"></span>
+            <button class="btn secondary" data-act="scan-games">Scan games folder</button>
+            <button class="btn secondary" data-act="choose-root">Choose root…</button>
+          </div>
+          <p>One nxrt root: <span class="mono">games/</span> is scanned for .nsp/.xci packages, each game's data (game files, saves, settings, mods) goes in <span class="mono">data/&lt;title id&gt;/</span>, and new recomps go in <span class="mono">recomps/</span>. Existing games keep their own folders.</p>
+          <div class="path">${esc(s.root_dir || '')}<br><span class="muted">games</span>&nbsp; ${esc(s.games_dir || '')}<br><span class="muted">data</span>&nbsp; ${esc(s.data_dir || '')}<br><span class="muted">recomps</span>&nbsp; ${esc(s.recomps_dir || '')}</div>
+          <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="open-root">Show in Finder</button></div>
+        </section>
+        <section class="card setting">
+          <div class="setting-head">
             <span class="section-title">Controller (this window)</span>
             ${S.pad.connected ? pill(S.pad.name || 'connected', 'ok') : pill(S.pad.error ? 'not available' : 'none connected', S.pad.error ? 'error' : 'muted')}
             <span class="spacer"></span>
@@ -1118,6 +1152,11 @@ import { ICONS } from './js/icons.js';
           <div class="setting-head"><span class="section-title">New recomps</span></div>
           <p>Where Create a recomp puts them. The nxrt source is built into the app; set <span class="mono">NXRT_DIR</span> to use another checkout while developing.</p>
           <div class="path">${esc(s.recomps_dir)}<br><span class="muted">nxrt</span>&nbsp; ${esc(s.nxrt_dir)}</div>
+        </section>
+        <section class="card setting">
+          <div class="setting-head"><span class="section-title">nxnative</span></div>
+          <p>The other backend: a game's own code run natively (github.com/seedds/nxnative), built for this Mac from the game's NSP folder, which has to be on an APFS volume. Set <span class="mono">NXNATIVE_DIR</span> to use another checkout.</p>
+          <div class="path">${esc(s.nxnative_dir || '')}</div>
         </section>
         <section class="card setting">
           <div class="setting-head"><span class="section-title">The manager's own files</span><span class="spacer"></span><button class="btn secondary" data-act="open-config">Show in Finder</button></div>
@@ -1469,6 +1508,31 @@ import { ICONS } from './js/icons.js';
     }
   }
 
+  async function chooseRoot() {
+    try {
+      const path = await invoke('pick_root');
+      if (!path) return;
+      S.snap = await invoke('set_root', { path });
+      render();
+      toast('nxrt folder set', 'ok');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
+  async function scanGames() {
+    try {
+      const r = await invoke('scan_games');
+      S.snap = r.snapshot;
+      render();
+      if (!r.found) toast('No .nsp or .xci found in the games folder', 'info');
+      else if (!r.added) toast(`Scanned ${r.found} package${r.found === 1 ? '' : 's'}: no new games`, 'ok');
+      else toast(`Scanned ${r.found} package${r.found === 1 ? '' : 's'}: added ${r.added}`, 'ok');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
   async function startStep(g, stage, src) {
     try {
       await invoke('start_step', { key: g.key, stage, src: src || null });
@@ -1481,6 +1545,18 @@ import { ICONS } from './js/icons.js';
     try {
       await invoke('start_dev', { key: g.key });
     } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
+  async function setBackend(g, backend) {
+    if (!backend || backend === g.backend) return;
+    try {
+      S.snap = await invoke('set_backend', { key: g.key, backend });
+      render();
+      toast(`${g.title} now runs with ${backend}`, 'ok');
+    } catch (e) {
+      render(); // put the dropdown back on the backend the library still has
       toast(errText(e), 'error');
     }
   }
@@ -1672,6 +1748,12 @@ import { ICONS } from './js/icons.js';
         return load();
       case 'add-game':
         return addGame();
+      case 'choose-root':
+        return chooseRoot();
+      case 'scan-games':
+        return scanGames();
+      case 'open-root':
+        return invoke('reveal', { path: S.snap.root_dir, file: false });
       case 'add-app':
         return addAppSheet();
       case 'open':
@@ -1692,6 +1774,10 @@ import { ICONS } from './js/icons.js';
         return setupFrom('folder');
       case 'rebuild':
         return setupFrom('all');
+      case 'nx-build':
+        return g && startDev(g);
+      case 'backend':
+        return g && setBackend(g, el.dataset.backend);
       case 'add-base':
         return addBase();
       case 'create':
@@ -2189,7 +2275,7 @@ import { ICONS } from './js/icons.js';
         return;
       }
       const actEl = e.target.closest('[data-act]');
-      if (actEl) {
+      if (actEl && actEl.tagName !== 'SELECT') {
         e.preventDefault();
         doAct(actEl.dataset.act, actEl);
         return;
@@ -2199,6 +2285,11 @@ import { ICONS } from './js/icons.js';
     });
 
     document.addEventListener('change', (e) => {
+      if (e.target.matches('select[data-act="backend"]')) {
+        const g = game();
+        if (g) setBackend(g, e.target.value);
+        return;
+      }
       if (e.target.id === 'manager-follow') {
         S.managerFollow = e.target.checked;
         scheduleManager();

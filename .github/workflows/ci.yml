@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, nxnative]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -27,6 +27,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:e2e
+      - name: Upload UI failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-failure-artifacts
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
 
   build:
     name: macOS · checks + DMG
@@ -51,6 +61,8 @@ jobs:
           uname -m
           test "$(uname -m)" = arm64
       - run: npm ci
+      - name: Stage the nxrt submodule
+        run: sh scripts/bundle-nxrt.sh
       - name: Rust checks
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check

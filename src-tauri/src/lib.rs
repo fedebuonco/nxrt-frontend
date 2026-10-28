@@ -8,6 +8,7 @@ mod issues;
 mod library;
 mod logging;
 mod manage;
+mod nxnative;
 mod ops;
 mod pads;
 mod recomp;
@@ -54,6 +55,9 @@ pub fn run() {
             commands::pick_app,
             commands::pick_keys,
             commands::pick_folder,
+            commands::pick_root,
+            commands::set_root,
+            commands::scan_games,
             commands::add_package,
             commands::add_app,
             commands::choose_app,
@@ -63,6 +67,7 @@ pub fn run() {
             commands::start_game,
             commands::start_step,
             commands::start_dev,
+            commands::set_backend,
             commands::stop,
             commands::create_recomp,
             commands::save_dev,

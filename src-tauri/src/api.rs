@@ -118,6 +118,9 @@ pub struct Game {
     pub load_error: Option<String>,
     pub build_mismatch: bool,
     pub controls: Controls,
+    /// the backend that runs it (nxrt, nxnative) and the ones it can switch to
+    pub backend: String,
+    pub backends: Vec<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -127,8 +130,12 @@ pub struct Snapshot {
     pub keys_ok: bool,
     pub keys_home: Option<String>,
     pub config_dir: String,
+    pub root_dir: String,
+    pub games_dir: String,
+    pub data_dir: String,
     pub recomps_dir: String,
     pub nxrt_dir: String,
+    pub nxnative_dir: String,
     pub version: String,
     pub running: usize,
     pub message: Option<String>,
@@ -151,10 +158,25 @@ pub struct Gathered {
     pub status: Option<Result<runner::Status, String>>,
     pub files: Option<manage::GameFiles>,
     pub romfs: Option<Result<manage::RomfsSummary, String>>,
+    /// nxnative: what its Mac build has made (only for a game on the nxnative backend)
+    pub nx: Option<crate::nxnative::Probe>,
 }
 
 impl Gathered {
     pub fn gather(e: &Entry) -> Gathered {
+        Gathered::gather_in(e, &crate::nxnative::repo(None))
+    }
+    /// A game on the nxnative backend is read from its build folder (no process); one on nxrt asks its app.
+    pub fn gather_in(e: &Entry, nx_repo: &Path) -> Gathered {
+        if e.backend == crate::library::Backend::Nxnative {
+            return Gathered {
+                nx: Some(crate::nxnative::probe(e, nx_repo)),
+                ..Default::default()
+            };
+        }
+        Gathered::gather_nxrt(e)
+    }
+    fn gather_nxrt(e: &Entry) -> Gathered {
         let Some(exe) = &e.exe else {
             return Gathered::default();
         };
@@ -177,17 +199,18 @@ impl Gathered {
             status,
             files,
             romfs,
+            nx: None,
         }
     }
 }
 
 /// Every game's app asked at once: a refresh of four games then costs one.
-pub fn gather_all(entries: &[Entry]) -> Vec<Gathered> {
+pub fn gather_all(entries: &[Entry], nx_repo: &Path) -> Vec<Gathered> {
     let mut out = Vec::with_capacity(entries.len());
     std::thread::scope(|scope| {
         let handles: Vec<_> = entries
             .iter()
-            .map(|e| scope.spawn(move || Gathered::gather(e)))
+            .map(|e| scope.spawn(move || Gathered::gather_in(e, nx_repo)))
             .collect();
         for h in handles {
             out.push(h.join().unwrap_or_default());
@@ -221,7 +244,35 @@ pub fn game_key(e: &Entry) -> String {
     }
 }
 
+/// The backends a game can run on: nxrt always (its app, or a recomp made from its package), nxnative when it has
+/// its NSPs (nxnative builds from the game's NSP folder).
+pub fn backends(e: &Entry) -> Vec<String> {
+    let mut v = vec!["nxrt".to_string()];
+    if e.package.is_some() || e.update.is_some() || e.backend == crate::library::Backend::Nxnative {
+        v.push("nxnative".to_string());
+    }
+    v
+}
+
 pub fn view(
+    index: usize,
+    e: &Entry,
+    g: &Gathered,
+    lib_keys: Option<&Path>,
+    running: Option<RunInfo>,
+    last_exit: Option<ExitInfo>,
+) -> Game {
+    let mut v = if e.backend == crate::library::Backend::Nxnative {
+        view_nxnative(index, e, g, lib_keys, running, last_exit)
+    } else {
+        view_nxrt(index, e, g, lib_keys, running, last_exit)
+    };
+    v.backend = e.backend.name().to_string();
+    v.backends = backends(e);
+    v
+}
+
+fn view_nxrt(
     index: usize,
     e: &Entry,
     g: &Gathered,
@@ -374,11 +425,150 @@ pub fn view(
         load_error,
         build_mismatch,
         controls: e.controls.clone(),
+        backend: String::new(), // (view sets them)
+        backends: Vec::new(),
+    }
+}
+
+fn view_nxnative(
+    index: usize,
+    e: &Entry,
+    g: &Gathered,
+    lib_keys: Option<&Path>,
+    running: Option<RunInfo>,
+    last_exit: Option<ExitInfo>,
+) -> Game {
+    let default_probe = crate::nxnative::Probe::default();
+    let nx = g.nx.as_ref().unwrap_or(&default_probe);
+    let ready = e.run_cmd.is_some() && nx.host;
+    let steps = Steps {
+        files: nx.extracted,
+        generated: nx.patched,
+        code: ready,
+        builder: false,
+        dev: true,
+    };
+    let (state, tone) = nx_summary(e, nx, running.as_ref(), ready);
+    let next = if running.is_some() {
+        None
+    } else {
+        nx_next_action(e, nx, ready)
+    };
+    let files_detail = if nx.extracted {
+        "Extracted from the NSPs into the build folder".to_string()
+    } else if e.package.is_none() && e.update.is_none() {
+        "From the game's NSP folder".to_string()
+    } else {
+        "From its NSP folder: extracted by the build".to_string()
+    };
+    let title_id = crate::nxnative::title_id(e).unwrap_or_else(|| e.title_id.clone());
+    let has_icon = !e.title_id.is_empty()
+        && (crate::library::icon_path(&e.title_id).is_file()
+            || crate::library::icon_path(&title_id).is_file());
+    let work = nx.work.as_deref().map(path_str);
+    Game {
+        index,
+        key: game_key(e),
+        title_id: e.title_id.clone(),
+        title: if e.name.is_empty() {
+            title_id.clone()
+        } else {
+            e.name.clone()
+        },
+        publisher: e.publisher.clone(),
+        version: e.version.clone(),
+        app_name: if nx.profile {
+            "nxnative".into()
+        } else {
+            "nxnative (no profile)".into()
+        },
+        app_version: nx.note.clone(),
+        // (the window shows its setup steps for a game that has somewhere to build: its build folder)
+        exe: work.clone(),
+        package: e.package.as_deref().map(path_str),
+        update: e.update.as_deref().map(path_str),
+        data_root: nx.work.as_deref().map(|w| path_str(&w.join("run"))),
+        game_dir: nx.work.as_deref().map(|w| path_str(&w.join("extract"))),
+        recomp_dir: work,
+        build_dir: None,
+        build_cmd: None,
+        keys: e.keys.as_deref().or(lib_keys).map(path_str),
+        has_icon,
+        state,
+        tone,
+        ready,
+        steps,
+        files_detail,
+        romfs: None,
+        describe: None,
+        status: None,
+        files: None,
+        running,
+        last_exit,
+        next,
+        load_error: None,
+        build_mismatch: false,
+        controls: e.controls.clone(),
+        backend: String::new(), // (view sets them)
+        backends: Vec::new(),
     }
 }
 
 fn path_str(p: &Path) -> String {
     p.display().to_string()
+}
+
+fn nx_summary(
+    e: &Entry,
+    nx: &crate::nxnative::Probe,
+    running: Option<&RunInfo>,
+    ready: bool,
+) -> (String, String) {
+    if let Some(r) = running {
+        return (
+            if r.playing {
+                "Playing".into()
+            } else {
+                "Building…".into()
+            },
+            "info".into(),
+        );
+    }
+    if e.package.is_none() && e.update.is_none() {
+        return ("No NSP folder for this game".into(), "warn".into());
+    }
+    if ready {
+        return ("Ready to play".into(), "ok".into());
+    }
+    if !nx.profile {
+        return (
+            "nxnative has no profile for this game: a build is a best guess".into(),
+            "warn".into(),
+        );
+    }
+    ("Next: build it for this Mac".into(), "warn".into())
+}
+
+fn nx_next_action(e: &Entry, nx: &crate::nxnative::Probe, ready: bool) -> Option<Next> {
+    if e.package.is_none() && e.update.is_none() {
+        return None;
+    }
+    if ready {
+        return Some(Next {
+            label: "Play".into(),
+            kind: "play".into(),
+            primary: true,
+        });
+    }
+    Some(Next {
+        label: if nx.profile {
+            "Build for Mac".into()
+        } else {
+            "Build for Mac (best guess)".into()
+        },
+        kind: "build".into(),
+        primary: true,
+    })
 }
 
 fn summary(
@@ -641,5 +831,115 @@ mod tests {
         assert_eq!(v.tone, "error");
         assert_eq!(v.load_error.as_deref(), Some("doesn't answer --describe"));
         assert!(v.next.is_none());
+    }
+
+    fn nsp_entry() -> Entry {
+        Entry {
+            package: Some("/Volumes/SSD/Games/Demo/demo.nsp".into()),
+            title_id: "0100000000010000".into(),
+            name: "Demo".into(),
+            backend: crate::library::Backend::Nxnative,
+            ..Default::default()
+        }
+    }
+
+    fn nx_probe(extracted: bool, patched: bool, host: bool, profile: bool) -> Gathered {
+        Gathered {
+            nx: Some(crate::nxnative::Probe {
+                profile,
+                extracted,
+                patched,
+                host,
+                work: Some("/Volumes/SSD/Games/Demo/0100000000010000_build".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_nxnative_game_is_built_for_mac_then_played() {
+        let e = nsp_entry();
+        let v = view(
+            0,
+            &e,
+            &nx_probe(false, false, false, true),
+            None,
+            None,
+            None,
+        );
+        assert_eq!(v.backend, "nxnative");
+        assert_eq!(v.next.as_ref().map(|n| n.kind.as_str()), Some("build"));
+        assert_eq!(v.next.unwrap().label, "Build for Mac");
+        assert!(!v.ready);
+        let built = Entry {
+            run_cmd: Some("cd run && dmhost patched".into()),
+            ..nsp_entry()
+        };
+        let v = view(
+            0,
+            &built,
+            &nx_probe(true, true, true, true),
+            None,
+            None,
+            None,
+        );
+        assert!(v.ready);
+        assert_eq!(v.next.unwrap().kind, "play");
+    }
+
+    #[test]
+    fn an_nxnative_game_without_a_profile_is_a_best_guess() {
+        let v = view(
+            0,
+            &nsp_entry(),
+            &nx_probe(false, false, false, false),
+            None,
+            None,
+            None,
+        );
+        assert_eq!(v.next.unwrap().label, "Build for Mac (best guess)");
+        assert_eq!(v.tone, "warn");
+    }
+
+    #[test]
+    fn a_game_offers_the_backends_it_has_what_for() {
+        // an nxrt app and its NSP: both
+        let both = Entry {
+            exe: Some("/apps/fe3hrecomp".into()),
+            package: Some("/g/fe3h.nsp".into()),
+            ..Default::default()
+        };
+        assert_eq!(backends(&both), ["nxrt", "nxnative"]);
+        // its NSP only: both (nxrt makes a recomp of it from the package)
+        let nsp_only = Entry {
+            package: Some("/g/x.nsp".into()),
+            backend: crate::library::Backend::Nxnative,
+            ..Default::default()
+        };
+        assert_eq!(backends(&nsp_only), ["nxrt", "nxnative"]);
+        // an nxrt app alone: nxrt
+        let app_only = Entry {
+            exe: Some("/apps/x".into()),
+            ..Default::default()
+        };
+        assert_eq!(backends(&app_only), ["nxrt"]);
+        // the view says which one runs it
+        let v = view(0, &both, &Gathered::default(), None, None, None);
+        assert_eq!((v.backend.as_str(), v.backends.len()), ("nxrt", 2));
+    }
+
+    #[test]
+    fn the_backend_is_kept_in_the_library_file_only_when_not_nxrt() {
+        let text = toml::to_string(&Entry {
+            exe: Some("/a".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(!text.contains("backend"), "{text}");
+        let text = toml::to_string(&nsp_entry()).unwrap();
+        assert!(text.contains("backend = \"nxnative\""), "{text}");
+        let back: Entry = toml::from_str(&text).unwrap();
+        assert_eq!(back.backend, crate::library::Backend::Nxnative);
     }
 }

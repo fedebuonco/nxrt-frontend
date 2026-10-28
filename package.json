@@ -1,7 +1,7 @@
 {
   "name": "nxrt-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A manager for the nxrt Switch recomps: one library of games, their files and game code, Play",
   "scripts": {
     "dev": "tauri dev",
@@ -20,6 +20,7 @@
     "dmg": "sh scripts/make-dmg.sh"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@tauri-apps/cli": "^2",

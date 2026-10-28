@@ -39,7 +39,8 @@ struct RunFinished {
 pub fn snapshot(sh: &Shared) -> Snapshot {
     let t0 = std::time::Instant::now();
     let lib = sh.library.lock().unwrap().clone();
-    let infos = api::gather_all(&lib.games);
+    let nx_repo = crate::nxnative::repo(lib.nxnative_dir.as_deref());
+    let infos = api::gather_all(&lib.games, &nx_repo);
     let runs = sh.runs.lock().unwrap();
     let last = sh.last.lock().unwrap();
     let mut games = Vec::with_capacity(lib.games.len());
@@ -65,8 +66,12 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
             .filter(|p| p.is_file())
             .map(|p| p.display().to_string()),
         config_dir: library::dir().display().to_string(),
-        recomps_dir: library::dir().join("recomps").display().to_string(),
+        root_dir: lib.root_dir().display().to_string(),
+        games_dir: lib.games_dir().display().to_string(),
+        data_dir: lib.data_dir().display().to_string(),
+        recomps_dir: lib.recomps_dir().display().to_string(),
         nxrt_dir: recomp::default_nxrt().display().to_string(),
+        nxnative_dir: nx_repo.display().to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
         running: runs.len(),
         message: lib.load_error.clone().or_else(|| {
@@ -106,6 +111,7 @@ fn kind_label(k: Kind) -> String {
         Kind::Setup(Stage::All) => "all",
         Kind::DevBuild => "build",
         Kind::Create => "create",
+        Kind::NxBuild => "build",
     }
     .into()
 }
@@ -249,15 +255,8 @@ fn finish(
     how: String,
 ) -> ExitInfo {
     runner::forget();
-    let result = handle
-        .run
-        .lock()
-        .unwrap()
-        .progress
-        .lock()
-        .unwrap()
-        .result
-        .clone();
+    let progress = handle.run.lock().unwrap().progress.lock().unwrap().clone();
+    let result = progress.result.clone();
     let created = sh.creating.lock().unwrap().get(key).cloned();
     let mut exit = ExitInfo {
         text: format!("Last run: {how}"),
@@ -325,6 +324,20 @@ fn finish(
                     }
                     _ => (
                         "Creating the recomp failed: see the log in the logs folder".into(),
+                        false,
+                    ),
+                },
+                (Kind::NxBuild, _) => match progress.run_cmd.clone() {
+                    Some(cmd) if how == "closed" => {
+                        e.run_cmd = Some(cmd);
+                        save = true;
+                        ("Built for this Mac: ready to play".into(), true)
+                    }
+                    _ => (
+                        match &progress.failed {
+                            Some(f) => format!("The build stopped: {f}"),
+                            None => format!("The build {how}: see its log in the logs folder"),
+                        },
                         false,
                     ),
                 },
@@ -420,6 +433,88 @@ pub fn pick_folder(title: Option<String>) -> Option<String> {
 }
 
 #[tauri::command]
+pub fn pick_root() -> Option<String> {
+    rfd::FileDialog::new()
+        .set_title("The nxrt folder (games, game data and recomps live inside it)")
+        .pick_folder()
+        .map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+pub fn set_root(state: State<'_, Shared>, path: String) -> Result<Snapshot, String> {
+    let p = PathBuf::from(path.trim());
+    if p.as_os_str().is_empty() {
+        return Err("Choose a folder first".into());
+    }
+    std::fs::create_dir_all(p.join("games")).map_err(|e| format!("{}: {e}", p.display()))?;
+    let mut lib = state.library.lock().unwrap();
+    lib.root = Some(p);
+    lib.save()?;
+    Ok(snapshot(&state))
+}
+
+#[derive(Serialize, Clone)]
+pub struct ScanResult {
+    pub snapshot: Snapshot,
+    pub found: usize,
+    pub added: usize,
+}
+
+#[tauri::command]
+pub async fn scan_games(state: State<'_, Shared>) -> Result<ScanResult, String> {
+    let sh = state.inner().clone();
+    let (dir, keys) = {
+        let lib = sh.library.lock().unwrap();
+        let keys = lib.keys.clone().or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.join(".switch/prod.keys"))
+                .filter(|p| p.is_file())
+        });
+        (lib.games_dir(), keys)
+    };
+    let keys = keys.ok_or(
+        "A game package is read with the keys from your own Switch (prod.keys): none chosen",
+    )?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let packages = ops::find_packages(&dir);
+    let found = packages.len();
+    if found == 0 {
+        return Ok(ScanResult {
+            snapshot: snapshot(&sh),
+            found: 0,
+            added: 0,
+        });
+    }
+    let sh2 = sh.clone();
+    let added = tauri::async_runtime::spawn_blocking(move || -> Result<usize, String> {
+        let mut added = 0;
+        for pkg in packages {
+            let games = sh2.library.lock().unwrap().games.clone();
+            let read = ops::read_package(&games, &pkg, &keys)?;
+            let mut lib = sh2.library.lock().unwrap();
+            let before = lib.games.len();
+            let i = ops::merge_package(&mut lib.games, &pkg, &keys, read);
+            if i >= before {
+                added += 1;
+                let data = lib.data_root_for(&lib.games[i]);
+                if lib.games[i].data_root.is_none() {
+                    lib.games[i].data_root = Some(data);
+                }
+            }
+            lib.save()?;
+        }
+        Ok(added)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(ScanResult {
+        snapshot: snapshot(&sh),
+        found,
+        added,
+    })
+}
+
+#[tauri::command]
 pub async fn add_package(state: State<'_, Shared>, path: String) -> Result<Snapshot, String> {
     let sh = state.inner().clone();
     let pkg = PathBuf::from(path);
@@ -434,7 +529,12 @@ pub async fn add_package(state: State<'_, Shared>, path: String) -> Result<Snaps
         let games = sh2.library.lock().unwrap().games.clone();
         let read = ops::read_package(&games, &pkg, &keys)?;
         let mut lib = sh2.library.lock().unwrap();
-        ops::merge_package(&mut lib.games, &pkg, &keys, read);
+        let before = lib.games.len();
+        let i = ops::merge_package(&mut lib.games, &pkg, &keys, read);
+        if i >= before && lib.games[i].data_root.is_none() {
+            let data = lib.data_root_for(&lib.games[i]);
+            lib.games[i].data_root = Some(data);
+        }
         lib.save()
     })
     .await
@@ -469,13 +569,22 @@ pub async fn add_app(
             .find(|g| g.exe.is_none() && ops::same_game(&g.title_id, &d.title_id))
         {
             g.exe = Some(exe);
-            g.data_root = dr;
+            if dr.is_some() {
+                g.data_root = dr; // an explicit choice; otherwise keep the game's existing folder
+            }
         } else {
             lib.games.push(Entry {
                 exe: Some(exe),
                 data_root: dr,
+                title_id: d.title_id.clone(),
+                name: d.title.clone(),
                 ..Default::default()
             });
+            let i = lib.games.len() - 1;
+            if lib.games[i].data_root.is_none() {
+                let data = lib.data_root_for(&lib.games[i]);
+                lib.games[i].data_root = Some(data);
+            }
         }
         lib.save()?;
     }
@@ -569,6 +678,9 @@ pub fn start_game(
             .ok_or("No such game")?;
         (e, lib.controls.clone())
     };
+    if entry.backend == library::Backend::Nxnative {
+        return start_nxnative_game(&state, &app, &key, &entry);
+    }
     let exe = entry.exe.clone().ok_or("This game has no nxrt app yet")?;
     not_running(&state, &key)?;
     // (the game's own controls over the library's defaults; only what is set is passed)
@@ -719,6 +831,9 @@ pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<()
             .cloned()
             .ok_or("No such game")?
     };
+    if entry.backend == library::Backend::Nxnative {
+        return start_nxnative_build(&state, &app, &key, &entry);
+    }
     let (dir, cmd) = match (&entry.build_dir, &entry.build_cmd) {
         (Some(d), Some(c)) => (d.clone(), c.clone()),
         _ => return Err("No Dev build command set".into()),
@@ -726,6 +841,78 @@ pub fn start_dev(state: State<Shared>, app: AppHandle, key: String) -> Result<()
     not_running(&state, &key)?;
     let run = runner::Run::dev_build(&cmd, &dir, log_file("dev", "-build"), || {})?;
     start(&state, &app, &key, run, String::new())
+}
+
+/// nxnative: the game in nxnative's host, by the command its Mac build printed.
+fn start_nxnative_game(
+    sh: &Shared,
+    app: &AppHandle,
+    key: &str,
+    entry: &library::Entry,
+) -> Result<(), String> {
+    let cmd = entry
+        .run_cmd
+        .clone()
+        .ok_or("Not built for this Mac yet: Build for Mac first")?;
+    let work = crate::nxnative::work_dir(entry).ok_or("This game has no NSP folder")?;
+    not_running(sh, key)?;
+    let id = crate::nxnative::title_id(entry).unwrap_or_else(|| "game".into());
+    let run = runner::Run::nx_game(&cmd, &work, log_file(&id, ""), || {})?;
+    start(sh, app, key, run, String::new())
+}
+
+/// nxnative: Build for Mac, nxnative's script on the game's NSP folder (everything into <NSP folder>/<title ID>_build).
+fn start_nxnative_build(
+    sh: &Shared,
+    app: &AppHandle,
+    key: &str,
+    entry: &library::Entry,
+) -> Result<(), String> {
+    let (repo, lib_keys) = {
+        let lib = sh.library.lock().unwrap();
+        (
+            crate::nxnative::repo(lib.nxnative_dir.as_deref()),
+            lib.keys.clone(),
+        )
+    };
+    if !repo.join("scripts/build_ipa_from_nsp.py").is_file() {
+        return Err(format!("No nxnative checkout at {}", repo.display()));
+    }
+    let nsp = crate::nxnative::nsp_dir(entry).ok_or("This game has no NSP folder")?;
+    if let Some(why) = crate::nxnative::unsuitable(&nsp) {
+        return Err(why);
+    }
+    let package = entry
+        .package
+        .clone()
+        .or(entry.update.clone())
+        .ok_or("This game has no package")?;
+    let keys = ops::keys_for(entry.keys.as_deref().or(lib_keys.as_deref()), &package)
+        .ok_or("No prod.keys: choose them in the toolbar")?;
+    not_running(sh, key)?;
+    let id = crate::nxnative::title_id(entry).unwrap_or_else(|| "game".into());
+    let run = runner::Run::nx_build(&repo, &nsp, &keys, log_file(&id, "-build"), || {})?;
+    start(sh, app, key, run, String::new())
+}
+
+/// Which backend runs a game (nxrt, nxnative): the window's switch. Not while something of the game runs.
+#[tauri::command]
+pub fn set_backend(state: State<Shared>, key: String, backend: String) -> Result<Snapshot, String> {
+    let b = library::Backend::parse(&backend).ok_or_else(|| format!("No backend {backend}"))?;
+    not_running(&state, &key)?;
+    {
+        let mut lib = state.library.lock().unwrap();
+        let i = entry_index(&lib, &key)?;
+        if !api::backends(&lib.games[i]).iter().any(|x| x == b.name()) {
+            return Err(
+                "This game has no NSP: nxnative builds from the game's NSP folder".to_string(),
+            );
+        }
+        lib.games[i].backend = b;
+        lib.save()?;
+    }
+    tracing::info!(target: "library", key = %key, backend = %backend, "backend set");
+    Ok(snapshot(&state))
 }
 
 #[tauri::command]
