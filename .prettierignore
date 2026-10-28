@@ -9,3 +9,5 @@ package-lock.json
 
 playwright-report
 test-results
+
+tests/e2e/*-snapshots

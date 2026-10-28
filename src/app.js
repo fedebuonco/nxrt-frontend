@@ -364,9 +364,9 @@ import { ICONS } from './js/icons.js';
     const btn = n
       ? `<button class="btn ${n.primary ? 'primary' : 'outline'} sm" data-act="next" data-key="${esc(g.key)}">${esc(shortLabel(n.label))}</button>`
       : `<button class="btn secondary sm" data-act="open" data-key="${esc(g.key)}">Open</button>`;
-    return `<article class="game-card" data-card="${esc(g.key)}" tabindex="0" role="button" aria-label="${esc(g.title)}">
+    return `<article class="game-card" data-card="${esc(g.key)}" aria-label="${esc(g.title)}">
       ${cover(g)}
-      <div class="title">${esc(g.title || 'Unknown game')}</div>
+      <button class="title" data-act="open" data-key="${esc(g.key)}">${esc(g.title || 'Unknown game')}</button>
       <div class="meta" title="${esc(metaLine(g))}">${esc(metaLine(g))}</div>
       <div class="foot">
         <span class="state ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i><span class="txt" title="${esc(state)}">${esc(state)}</span></span>
@@ -851,7 +851,7 @@ import { ICONS } from './js/icons.js';
     };
     const group = (title, rows) =>
       `<div class="pad-group"><div class="pad-group-title">${title}</div><ul>${rows.join('')}</ul></div>`;
-    return `<div class="pad-groups" role="list" aria-label="Controller buttons and the inputs they send">
+    return `<div class="pad-groups">
       ${group('Face buttons', [row('south', L.south, 'Bottom'), row('east', L.east, 'Right'), row('west', L.west, 'Left'), row('north', L.north, 'Top')])}
       ${group('Shoulders', [row('lshoulder', 'LB', 'Left bumper'), row('rshoulder', 'RB', 'Right bumper'), row('ltrigger', 'LT', 'Left trigger'), row('rtrigger', 'RT', 'Right trigger')])}
       ${group('D-pad', [row('dpad_up', '↑', 'Up'), row('dpad_down', '↓', 'Down'), row('dpad_left', '←', 'Left'), row('dpad_right', '→', 'Right')])}

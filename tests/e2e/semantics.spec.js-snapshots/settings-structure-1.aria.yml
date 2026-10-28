@@ -1,0 +1,109 @@
+- text: Preferences
+- heading "Settings" [level=1]
+- paragraph: The keys games are read with, and where the manager keeps its own things.
+- text: Keys prod.keys
+- button "Forget"
+- button "Choose prod.keys…"
+- paragraph: The keys from your own Switch (prod.keys). Needed to read the package; nothing is decrypted to disk.
+- text: /tmp/nxrt-test Folders
+- button "Scan games folder"
+- button "Choose root…"
+- paragraph: "One nxrt root: games/ is scanned for .nsp/.xci packages, each game's data (game files, saves, settings, mods) goes in data/<title id>/, and new recomps go in recomps/. Existing games keep their own folders."
+- text: /tmp/nxrt-test/root games /tmp/nxrt-test/root/games data /tmp/nxrt-test/root/data recomps /tmp/nxrt-test/root/recomps
+- button "Show in Finder"
+- text: Controller (this window) Xbox Wireless Controller
+- button "Controls…"
+- paragraph: Any controller works over USB or Bluetooth, and is picked up while the window is focused. The D-pad or left stick moves, A selects, B goes back, and LB / RB change section.
+- paragraph: If a connected controller isn't seen, allow Input Monitoring for nxrt in System Settings › Privacy & Security.
+- text: A Select B Back X Play / Stop Y Details LB / RB Section D-pad Move Controller map Xbox Wireless Controller
+- button "Test"
+- paragraph: "Your controller defaults at a glance: each of the pad’s buttons and the nxrt input it sends. Test to see each one as you press it."
+- text: Press Test, then a button. Face buttons
+- list:
+  - listitem "Bottom (A)": A Bottom B
+  - listitem "Right (B)": B Right A
+  - listitem "Left (X)": X Left Y
+  - listitem "Top (Y)": Y Top X
+- text: Shoulders
+- list:
+  - listitem "LB / L1": LB Left bumper L
+  - listitem "RB / R1": RB Right bumper R
+  - listitem "LT / L2": LT Left trigger ZL
+  - listitem "RT / R2": RT Right trigger ZR
+- text: D-pad
+- list:
+  - listitem "D-pad Up": ↑ Up D-pad Up
+  - listitem "D-pad Down": ↓ Down D-pad Down
+  - listitem "D-pad Left": ← Left D-pad Left
+  - listitem "D-pad Right": → Right D-pad Right
+- text: Sticks and menu
+- list:
+  - listitem "Left stick press": L3 Left stick Left stick press
+  - listitem "Right stick press": R3 Right stick Right stick press
+  - listitem "Back / Minus": − Back Minus
+  - listitem "Start / Plus": + Start Plus
+  - listitem "Guide": Home Guide not bound
+- paragraph: A game's Controls can override these. Paddles and touchpads are in the bindings list below.
+- text: Controller defaults
+- button "Reset"
+- paragraph: "Passed to every game when it starts: a row set here wins over the game's own setting, and a game's Controls can override it. Left on “Game's own”, the game keeps what it has. With a controller, focus a row and use ← → (or A) to change it."
+- text: Button prompts
+- combobox "Button prompts":
+  - option "Game's own" [selected]
+  - option "Auto"
+  - option "Nintendo"
+  - option "Xbox"
+  - option "PlayStation"
+  - option "Keyboard"
+- text: D-pad moves the stick
+- combobox "D-pad moves the stick":
+  - option "Game's own"
+  - option "On"
+  - option "Off" [selected]
+- text: Rumble
+- combobox "Rumble":
+  - option "Game's own" [selected]
+  - option "On"
+  - option "Off"
+- text: Rumble strength
+- combobox "Rumble strength":
+  - option "Game's own" [selected]
+  - option "0%"
+  - option "5%"
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+  - option /\d+%/
+- text: Controller light
+- combobox "Controller light":
+  - option "Game's own" [selected]
+  - option "On"
+  - option "Off"
+- group: Bindings 0 set
+- text: New recomps
+- paragraph: Where Create a recomp puts them. The nxrt source is built into the app; set NXRT_DIR to use another checkout while developing.
+- text: /tmp/nxrt-test/root/recomps nxrt /tmp/nxrt-test/nxrt nxnative
+- paragraph: "The other backend: a game's own code run natively (github.com/seedds/nxnative), built for this Mac from the game's NSP folder, which has to be on an APFS volume. Set NXNATIVE_DIR to use another checkout."
+- text: The manager's own files
+- button "Show in Finder"
+- paragraph: The library (library.toml), the games' icons and the logs.
+- text: /tmp/nxrt-test nxrt-frontend A manager for the nxrt Switch recomps. v0.2.0 Diagnostics
+- button "Manager log"
+- paragraph: "The manager's own log: level info, a daily file, seven kept. Set NXRT_FRONTEND_LOG=debug for more detail; NXRT_GAME_LOG=debug passes a level to a game's nxrt log."
+- text: /tmp/nxrt-test/logs/manager.log v0.1.1 available — use the sidebar
+- button "Check now"

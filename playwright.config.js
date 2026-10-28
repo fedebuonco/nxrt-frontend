@@ -4,11 +4,15 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
   fullyParallel: true,
-  reporter: 'list',
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  outputDir: 'test-results',
   use: {
     baseURL: 'http://127.0.0.1:1420',
     channel: 'chrome',
     headless: true,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
     viewport: { width: 1240, height: 820 },
   },
   webServer: {

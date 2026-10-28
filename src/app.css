@@ -14,7 +14,7 @@
   --well: #070708;
   --text: #f4f4f5;
   --sub: #b4b4ba;
-  --muted: #808087;
+  --muted: #a7a7af;
   --accent: var(--joy-blue);
   --accent-hi: #3cc8ee;
   --accent-lo: #089fc6;
@@ -603,6 +603,21 @@ h1 {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.game-card button.title {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  text-align: left;
+  cursor: pointer;
 }
 .game-card .meta {
   margin: 2px 4px 0;
@@ -1770,11 +1785,11 @@ body.pad-on .page {
   padding: 1px 2px;
   border: 0;
   background: none;
-  color: var(--muted);
+  color: var(--sub);
   font: inherit;
   font-size: 10px;
   letter-spacing: 0.01em;
-  opacity: 0.58;
+  opacity: 1;
   cursor: pointer;
 }
 .donate:hover {

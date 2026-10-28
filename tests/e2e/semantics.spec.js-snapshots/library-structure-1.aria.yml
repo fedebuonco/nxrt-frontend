@@ -1,0 +1,13 @@
+- text: Collection
+- heading "Library" [level=1]
+- paragraph: 1 game · 1 ready to play
+- button "Refresh"
+- button "Scan games folder"
+- button "Add an nxrt app"
+- button "Add a Switch game"
+- article "Echoes of the Crown":
+  - text: ETC
+  - button "Echoes of the Crown"
+  - text: Demo Studio · v1.0.0 · Demo Recomp Ready to play
+  - button "Play"
+- button "Add a game Drop an .nsp or .xci anywhere on the window, or choose one Browse…"

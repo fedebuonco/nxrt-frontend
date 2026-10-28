@@ -1,0 +1,30 @@
+- button "Library"
+- text: ETC
+- heading "Echoes of the Crown" [level=1]
+- text: Demo Studio · v1.0.0 · 0100DEMO00000000 · Demo Recomp alpha_1 Ready to play Runs with
+- combobox "Backend":
+  - option "nxrt" [selected]
+  - option "nxnative"
+- button "Play"
+- button "Start screen"
+- button "Report an issue…"
+- text: Opens the issue form for the likely project — nxrt, nxnative or nxrt-frontend — with the game, its build and your macOS version filled in (no paths, no log). Setup 3 of 4 done
+- button "Set up again"
+- text: /Step 1 · done Game files \d+ files, 8\.0 GB Step 2 · done Generate the game code The game's ARM code, translated to C Step 3 · done Compile the game code That C, built into the game's library Ready Play The game in its own window/
+- group: Controls using defaults
+- text: Where things are Game package keep /tmp/nxrt-test/games/demo.nsp
+- button "Show"
+- text: Data folder back up /tmp/nxrt-test/data
+- button "Open"
+- text: Game folder rebuildable /tmp/nxrt-test/game
+- button "Open"
+- text: App keep /tmp/nxrt-test/apps/demo-recomp
+- button "Show"
+- text: Recomp folder source /tmp/nxrt-test/recomp
+- button "Open"
+- text: Keys keep /tmp/nxrt-test/prod.keys
+- button "Show"
+- text: Log Nothing running The log of a step or a game, live. Every run is kept in Logs.
+- group: Details
+- group: Dev build
+- button "Remove from the library"
