@@ -347,6 +347,7 @@ import { ICONS } from './js/icons.js';
         </div>
         <div class="actions">
           <button class="btn ghost" data-act="refresh">Refresh</button>
+          <button class="btn secondary" data-act="scan-games">Scan games folder</button>
           <button class="btn secondary" data-act="add-app">Add an nxrt app</button>
           <button class="btn primary" data-act="add-game">${ICONS.plus} Add a Switch game</button>
         </div>
@@ -1125,6 +1126,16 @@ import { ICONS } from './js/icons.js';
         </section>
         <section class="card setting">
           <div class="setting-head">
+            <span class="section-title">Folders</span><span class="spacer"></span>
+            <button class="btn secondary" data-act="scan-games">Scan games folder</button>
+            <button class="btn secondary" data-act="choose-root">Choose root…</button>
+          </div>
+          <p>One nxrt root: <span class="mono">games/</span> is scanned for .nsp/.xci packages, each game's data (game files, saves, settings, mods) goes in <span class="mono">data/&lt;title id&gt;/</span>, and new recomps go in <span class="mono">recomps/</span>. Existing games keep their own folders.</p>
+          <div class="path">${esc(s.root_dir || '')}<br><span class="muted">games</span>&nbsp; ${esc(s.games_dir || '')}<br><span class="muted">data</span>&nbsp; ${esc(s.data_dir || '')}<br><span class="muted">recomps</span>&nbsp; ${esc(s.recomps_dir || '')}</div>
+          <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="open-root">Show in Finder</button></div>
+        </section>
+        <section class="card setting">
+          <div class="setting-head">
             <span class="section-title">Controller (this window)</span>
             ${S.pad.connected ? pill(S.pad.name || 'connected', 'ok') : pill(S.pad.error ? 'not available' : 'none connected', S.pad.error ? 'error' : 'muted')}
             <span class="spacer"></span>
@@ -1497,6 +1508,31 @@ import { ICONS } from './js/icons.js';
     }
   }
 
+  async function chooseRoot() {
+    try {
+      const path = await invoke('pick_root');
+      if (!path) return;
+      S.snap = await invoke('set_root', { path });
+      render();
+      toast('nxrt folder set', 'ok');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
+  async function scanGames() {
+    try {
+      const r = await invoke('scan_games');
+      S.snap = r.snapshot;
+      render();
+      if (!r.found) toast('No .nsp or .xci found in the games folder', 'info');
+      else if (!r.added) toast(`Scanned ${r.found} package${r.found === 1 ? '' : 's'}: no new games`, 'ok');
+      else toast(`Scanned ${r.found} package${r.found === 1 ? '' : 's'}: added ${r.added}`, 'ok');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
+  }
+
   async function startStep(g, stage, src) {
     try {
       await invoke('start_step', { key: g.key, stage, src: src || null });
@@ -1712,6 +1748,12 @@ import { ICONS } from './js/icons.js';
         return load();
       case 'add-game':
         return addGame();
+      case 'choose-root':
+        return chooseRoot();
+      case 'scan-games':
+        return scanGames();
+      case 'open-root':
+        return invoke('reveal', { path: S.snap.root_dir, file: false });
       case 'add-app':
         return addAppSheet();
       case 'open':

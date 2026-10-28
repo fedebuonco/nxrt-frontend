@@ -91,6 +91,9 @@ impl Backend {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Library {
+    /// one root for the manager's games, per-game data and recomp builds. None: the default (~/nxrt).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<PathBuf>,
     /// the player's keys file (prod.keys) the toolbar chose: used before one beside a package or in ~/.switch
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keys: Option<PathBuf>,
@@ -121,6 +124,13 @@ pub fn check_keys(p: &Path) -> Result<(), String> {
             p.display()
         ))
     }
+}
+
+/// The root used when the library has none: `~/nxrt` (falls back to the config folder).
+pub fn default_root() -> PathBuf {
+    dirs::home_dir()
+        .map(|h| h.join("nxrt"))
+        .unwrap_or_else(|| dir().join("nxrt"))
 }
 
 pub fn dir() -> PathBuf {
@@ -202,6 +212,42 @@ impl Library {
         std::fs::rename(&tmp, &p).map_err(|e| format!("{}: {e}", p.display()))
     }
 
+    /// The one root the manager works in. A stored root wins; otherwise `~/nxrt`.
+    pub fn root_dir(&self) -> PathBuf {
+        self.root.clone().unwrap_or_else(default_root)
+    }
+    pub fn games_dir(&self) -> PathBuf {
+        self.root_dir().join("games")
+    }
+    pub fn data_dir(&self) -> PathBuf {
+        self.root_dir().join("data")
+    }
+    pub fn recomps_dir(&self) -> PathBuf {
+        self.root_dir().join("recomps")
+    }
+
+    /// Where a game's per-game data (game files, saves, settings, mods) lives under the central root.
+    pub fn data_root_for(&self, entry: &Entry) -> PathBuf {
+        let id = if !entry.title_id.is_empty() {
+            entry.title_id.trim().to_ascii_lowercase()
+        } else if !entry.name.is_empty() {
+            entry
+                .name
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect()
+        } else {
+            "game".to_string()
+        };
+        self.data_dir().join(id)
+    }
+
     pub fn add_app(&mut self, exe: &Path, data_root: Option<PathBuf>) -> bool {
         if self.games.iter().any(|g| g.exe.as_deref() == Some(exe)) {
             return false;
@@ -251,6 +297,28 @@ mod tests {
         assert_eq!(
             back.games[0].exe.as_deref(),
             Some(Path::new("/tmp/nxrt-test-app"))
+        );
+    }
+
+    #[test]
+    fn one_root_derives_games_data_and_recomps() {
+        let mut lib = Library::default();
+        lib.root = Some(PathBuf::from("/central"));
+        assert_eq!(lib.games_dir(), Path::new("/central/games"));
+        assert_eq!(lib.data_dir(), Path::new("/central/data"));
+        assert_eq!(lib.recomps_dir(), Path::new("/central/recomps"));
+        let e = Entry {
+            title_id: "0100ABCD".into(),
+            ..Default::default()
+        };
+        assert_eq!(lib.data_root_for(&e), Path::new("/central/data/0100abcd"));
+        let named = Entry {
+            name: "My Game!".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            lib.data_root_for(&named),
+            Path::new("/central/data/my-game-")
         );
     }
 

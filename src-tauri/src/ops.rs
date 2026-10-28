@@ -165,6 +165,37 @@ pub fn create_recomp(
 }
 
 /// A macOS .app bundle picked: its executable inside.
+/// Packages under a games root, recursively (`.nsp`/`.xci`, case-insensitive), sorted. Hidden directories are skipped.
+pub fn find_packages(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+        if depth > 8 {
+            return;
+        }
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            let name = e.file_name();
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if p.is_dir() {
+                walk(&p, depth + 1, out);
+            } else if p
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("nsp") || x.eq_ignore_ascii_case("xci"))
+            {
+                out.push(p);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, 0, &mut out);
+    out.sort();
+    out
+}
+
 pub fn resolve_app(p: &Path) -> PathBuf {
     if p.extension().is_some_and(|e| e == "app") {
         if let Ok(rd) = std::fs::read_dir(p.join("Contents/MacOS")) {
@@ -495,5 +526,20 @@ mod tests {
         assert!(same_game("0100000000010800", "0100000000010000"));
         assert!(!same_game("", ""));
         assert!(!same_game("0100000000020000", "0100000000010000"));
+    }
+
+    #[test]
+    fn packages_are_found_recursively_and_sorted() {
+        let d = std::env::temp_dir().join(format!("nxrt-scan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("a/b")).unwrap();
+        std::fs::write(d.join("z.NSP"), b"x").unwrap();
+        std::fs::write(d.join("a/b/game.xci"), b"x").unwrap();
+        std::fs::write(d.join("a/readme.txt"), b"x").unwrap();
+        std::fs::create_dir_all(d.join(".hidden")).unwrap();
+        std::fs::write(d.join(".hidden/ignored.nsp"), b"x").unwrap();
+        let got = find_packages(&d);
+        assert_eq!(got, vec![d.join("a/b/game.xci"), d.join("z.NSP")]);
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

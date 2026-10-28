@@ -221,3 +221,36 @@ test('a game with one backend has no switch', async ({ page }) => {
   await openDemo(page);
   await expect(page.locator('select[data-act="backend"]')).toHaveCount(0);
 });
+
+test('the folders setting shows the central layout and scans games', async ({ page }) => {
+  const scanned = structuredClone(snapshot);
+  await open(page, { scan_games: { snapshot: scanned, found: 3, added: 1 } });
+  await page.locator('[data-nav="settings"]').click();
+  await expect(page.getByText('/tmp/nxrt-test/root/games')).toBeVisible();
+  await expect(page.getByText('/tmp/nxrt-test/root/data')).toBeVisible();
+  await page.getByRole('button', { name: 'Scan games folder' }).click();
+  await expect.poll(async () => (await calls(page, 'scan_games')).length).toBe(1);
+  await expect(page.locator('.toast.ok')).toContainText('added 1');
+});
+
+test('choosing the nxrt root stores it', async ({ page }) => {
+  const moved = structuredClone(snapshot);
+  moved.root_dir = '/Volumes/Games/nxrt';
+  moved.games_dir = '/Volumes/Games/nxrt/games';
+  moved.data_dir = '/Volumes/Games/nxrt/data';
+  moved.recomps_dir = '/Volumes/Games/nxrt/recomps';
+  await open(page, { pick_root: '/Volumes/Games/nxrt', set_root: moved });
+  await page.locator('[data-nav="settings"]').click();
+  await page.getByRole('button', { name: 'Choose root…' }).click();
+  await expect
+    .poll(async () => (await calls(page, 'set_root')).map((c) => c.args))
+    .toEqual([{ path: '/Volumes/Games/nxrt' }]);
+  await expect(page.getByText('/Volumes/Games/nxrt/data')).toBeVisible();
+  await expect(page.locator('.toast.ok')).toContainText('folder set');
+});
+
+test('a scan failure says why', async ({ page }) => {
+  await open(page, { scan_games: { __error: 'No prod.keys' } });
+  await page.getByRole('button', { name: 'Scan games folder' }).click();
+  await expect(page.locator('.toast.error')).toContainText('No prod.keys');
+});

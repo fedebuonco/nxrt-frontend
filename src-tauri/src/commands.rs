@@ -66,7 +66,10 @@ pub fn snapshot(sh: &Shared) -> Snapshot {
             .filter(|p| p.is_file())
             .map(|p| p.display().to_string()),
         config_dir: library::dir().display().to_string(),
-        recomps_dir: library::dir().join("recomps").display().to_string(),
+        root_dir: lib.root_dir().display().to_string(),
+        games_dir: lib.games_dir().display().to_string(),
+        data_dir: lib.data_dir().display().to_string(),
+        recomps_dir: lib.recomps_dir().display().to_string(),
         nxrt_dir: recomp::default_nxrt().display().to_string(),
         nxnative_dir: nx_repo.display().to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
@@ -430,6 +433,88 @@ pub fn pick_folder(title: Option<String>) -> Option<String> {
 }
 
 #[tauri::command]
+pub fn pick_root() -> Option<String> {
+    rfd::FileDialog::new()
+        .set_title("The nxrt folder (games, game data and recomps live inside it)")
+        .pick_folder()
+        .map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+pub fn set_root(state: State<'_, Shared>, path: String) -> Result<Snapshot, String> {
+    let p = PathBuf::from(path.trim());
+    if p.as_os_str().is_empty() {
+        return Err("Choose a folder first".into());
+    }
+    std::fs::create_dir_all(p.join("games")).map_err(|e| format!("{}: {e}", p.display()))?;
+    let mut lib = state.library.lock().unwrap();
+    lib.root = Some(p);
+    lib.save()?;
+    Ok(snapshot(&state))
+}
+
+#[derive(Serialize, Clone)]
+pub struct ScanResult {
+    pub snapshot: Snapshot,
+    pub found: usize,
+    pub added: usize,
+}
+
+#[tauri::command]
+pub async fn scan_games(state: State<'_, Shared>) -> Result<ScanResult, String> {
+    let sh = state.inner().clone();
+    let (dir, keys) = {
+        let lib = sh.library.lock().unwrap();
+        let keys = lib.keys.clone().or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.join(".switch/prod.keys"))
+                .filter(|p| p.is_file())
+        });
+        (lib.games_dir(), keys)
+    };
+    let keys = keys.ok_or(
+        "A game package is read with the keys from your own Switch (prod.keys): none chosen",
+    )?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let packages = ops::find_packages(&dir);
+    let found = packages.len();
+    if found == 0 {
+        return Ok(ScanResult {
+            snapshot: snapshot(&sh),
+            found: 0,
+            added: 0,
+        });
+    }
+    let sh2 = sh.clone();
+    let added = tauri::async_runtime::spawn_blocking(move || -> Result<usize, String> {
+        let mut added = 0;
+        for pkg in packages {
+            let games = sh2.library.lock().unwrap().games.clone();
+            let read = ops::read_package(&games, &pkg, &keys)?;
+            let mut lib = sh2.library.lock().unwrap();
+            let before = lib.games.len();
+            let i = ops::merge_package(&mut lib.games, &pkg, &keys, read);
+            if i >= before {
+                added += 1;
+                let data = lib.data_root_for(&lib.games[i]);
+                if lib.games[i].data_root.is_none() {
+                    lib.games[i].data_root = Some(data);
+                }
+            }
+            lib.save()?;
+        }
+        Ok(added)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(ScanResult {
+        snapshot: snapshot(&sh),
+        found,
+        added,
+    })
+}
+
+#[tauri::command]
 pub async fn add_package(state: State<'_, Shared>, path: String) -> Result<Snapshot, String> {
     let sh = state.inner().clone();
     let pkg = PathBuf::from(path);
@@ -444,7 +529,12 @@ pub async fn add_package(state: State<'_, Shared>, path: String) -> Result<Snaps
         let games = sh2.library.lock().unwrap().games.clone();
         let read = ops::read_package(&games, &pkg, &keys)?;
         let mut lib = sh2.library.lock().unwrap();
-        ops::merge_package(&mut lib.games, &pkg, &keys, read);
+        let before = lib.games.len();
+        let i = ops::merge_package(&mut lib.games, &pkg, &keys, read);
+        if i >= before && lib.games[i].data_root.is_none() {
+            let data = lib.data_root_for(&lib.games[i]);
+            lib.games[i].data_root = Some(data);
+        }
         lib.save()
     })
     .await
@@ -479,13 +569,22 @@ pub async fn add_app(
             .find(|g| g.exe.is_none() && ops::same_game(&g.title_id, &d.title_id))
         {
             g.exe = Some(exe);
-            g.data_root = dr;
+            if dr.is_some() {
+                g.data_root = dr; // an explicit choice; otherwise keep the game's existing folder
+            }
         } else {
             lib.games.push(Entry {
                 exe: Some(exe),
                 data_root: dr,
+                title_id: d.title_id.clone(),
+                name: d.title.clone(),
                 ..Default::default()
             });
+            let i = lib.games.len() - 1;
+            if lib.games[i].data_root.is_none() {
+                let data = lib.data_root_for(&lib.games[i]);
+                lib.games[i].data_root = Some(data);
+            }
         }
         lib.save()?;
     }

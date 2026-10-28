@@ -25,6 +25,20 @@ per-game settings, updates, logs, the command line, and what the game apps answe
 
 Each run's log is shown live and kept in `~/Library/Application Support/nxrt-frontend/logs/`.
 
+## Folders and scanning
+
+**Settings → Folders** chooses one nxrt root and shows what it derives:
+
+```
+<root>/games/            scanned for .nsp / .xci packages
+<root>/data/<title id>/  that game's files, saves, settings and mods
+<root>/recomps/          recomp builds made by the manager
+```
+
+**Scan games folder** walks `games/` recursively (hidden folders skipped), reads every package it finds, and adds the
+ones that are not in the library yet; existing games are updated, not duplicated. **Choose root…** moves the derived
+folders for new games. Existing games keep their own data/recomp folders, so changing the root never moves saves.
+
 ## The backend: nxrt or nxnative
 
 A game runs on one of two backends, and the library remembers which:
@@ -33,8 +47,8 @@ A game runs on one of two backends, and the library remembers which:
 - **nxnative**: the game's own code run natively on this Mac, built by [nxnative](https://github.com/seedds/nxnative)
   from the game's NSPs. The game's steps become **Build for Mac**, then **Play**.
 
-A game with both an nxrt app and an NSP shows **Runs with nxrt | nxnative** under its state; one click switches which
-backend Play and the build use. Nothing is deleted by switching: both builds stay where they are, so a game can go back
+A game with both an nxrt app and an NSP shows **Runs with** under its state; choosing nxrt or nxnative in the dropdown
+switches which backend Play and the build use. Nothing is deleted by switching: both builds stay where they are, so a game can go back
 and forth.
 
 The nxnative build works in `<NSP folder>/<title id>_build`, so the game's NSP folder has to be on an APFS volume: on
