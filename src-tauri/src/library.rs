@@ -302,8 +302,10 @@ mod tests {
 
     #[test]
     fn one_root_derives_games_data_and_recomps() {
-        let mut lib = Library::default();
-        lib.root = Some(PathBuf::from("/central"));
+        let lib = Library {
+            root: Some(PathBuf::from("/central")),
+            ..Default::default()
+        };
         assert_eq!(lib.games_dir(), Path::new("/central/games"));
         assert_eq!(lib.data_dir(), Path::new("/central/data"));
         assert_eq!(lib.recomps_dir(), Path::new("/central/recomps"));
