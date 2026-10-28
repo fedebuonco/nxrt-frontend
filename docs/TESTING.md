@@ -44,7 +44,7 @@ npx playwright test tests/e2e/semantics.spec.js --update-snapshots
 
 ### Failed UI runs
 
-On CI, Playwright keeps a trace, screenshot and video of a failure (`test-results/`), and the workflow uploads them as
+On CI, Playwright keeps a trace and screenshot of a failure (`test-results/`), and the workflow uploads them as
 the `ui-failure-artifacts` artifact. Locally, open a trace with `npx playwright show-trace test-results/.../trace.zip`.
 
 ## CI
