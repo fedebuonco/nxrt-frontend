@@ -282,26 +282,29 @@ import { ICONS } from './js/icons.js';
   // Decorative only; no effect for reduced-motion users or touch pointers.
   function decorateCovers() {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    for (const el of document.querySelectorAll('.cover')) {
-      if (el.dataset.holo) continue;
-      el.dataset.holo = '1';
-      el.addEventListener('pointermove', (e) => {
-        if (e.pointerType !== 'mouse') return;
+    const seen = new Set();
+    const bind = (host, el) => {
+      if (!el || seen.has(el)) return;
+      seen.add(el);
+      host.addEventListener('pointermove', (e) => {
+        if (e.pointerType && e.pointerType !== 'mouse') return;
         const r = el.getBoundingClientRect();
         const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
         const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-        el.style.setProperty('--rx', `${((0.5 - y) * 12).toFixed(2)}deg`);
-        el.style.setProperty('--ry', `${((x - 0.5) * 12).toFixed(2)}deg`);
+        el.style.setProperty('--rx', `${((0.5 - y) * 15).toFixed(2)}deg`);
+        el.style.setProperty('--ry', `${((x - 0.5) * 15).toFixed(2)}deg`);
         el.style.setProperty('--mx', `${(x * 100).toFixed(1)}%`);
         el.style.setProperty('--my', `${(y * 100).toFixed(1)}%`);
+        el.style.setProperty('--holo-angle', `${(x * 180 + y * 90).toFixed(1)}deg`);
         el.classList.add('holo-on');
       });
-      el.addEventListener('pointerleave', () => {
+      host.addEventListener('pointerleave', () => {
         el.classList.remove('holo-on');
-        el.style.setProperty('--rx', '0deg');
-        el.style.setProperty('--ry', '0deg');
+        for (const p of ['--rx', '--ry', '--mx', '--my', '--holo-angle']) el.style.removeProperty(p);
       });
-    }
+    };
+    for (const card of document.querySelectorAll('.game-card')) bind(card, card.querySelector('.cover'));
+    for (const el of document.querySelectorAll('.cover')) bind(el, el);
   }
 
   function loadingHtml(text) {

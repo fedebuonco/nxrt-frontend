@@ -576,11 +576,12 @@ h1 {
   --ry: 0deg;
   --mx: 50%;
   --my: 50%;
+  --holo-angle: 0deg;
   transform: perspective(700px) rotateX(var(--rx)) rotateY(var(--ry));
   transform-style: preserve-3d;
   transition:
-    transform 120ms ease-out,
-    box-shadow 180ms ease;
+    transform 70ms ease-out,
+    box-shadow 160ms ease;
   will-change: transform;
 }
 .cover::before,
@@ -591,64 +592,128 @@ h1 {
   z-index: 2;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity 140ms ease;
 }
 .cover::before {
-  background: radial-gradient(
-    circle at var(--mx) var(--my),
-    rgba(255, 255, 255, 0.42),
-    rgba(255, 255, 255, 0.08) 28%,
-    transparent 58%
-  );
+  background:
+    repeating-linear-gradient(112deg, rgba(255, 255, 255, 0.11) 0 1px, transparent 1px 6px),
+    radial-gradient(
+      circle at var(--mx) var(--my),
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0.12) 26%,
+      transparent 56%
+    );
   mix-blend-mode: screen;
 }
 .cover::after {
-  background: repeating-linear-gradient(
-    112deg,
-    rgba(255, 46, 99, 0.2) 0%,
-    rgba(255, 196, 0, 0.18) 10%,
-    rgba(70, 255, 160, 0.16) 20%,
-    rgba(0, 190, 255, 0.2) 30%,
-    rgba(180, 70, 255, 0.2) 40%,
-    rgba(255, 46, 99, 0.2) 50%
-  );
-  background-size: 220% 220%;
-  background-position: var(--mx) var(--my);
-  mix-blend-mode: color-dodge;
-  filter: saturate(1.25);
-}
-.cover.holo-on::before,
-.cover.holo-on::after {
-  opacity: 1;
+  background:
+    repeating-linear-gradient(
+      105deg,
+      rgba(255, 46, 99, 0.55) 0%,
+      rgba(255, 209, 46, 0.5) 8%,
+      rgba(77, 255, 161, 0.45) 16%,
+      rgba(46, 197, 255, 0.5) 24%,
+      rgba(180, 77, 255, 0.5) 32%,
+      rgba(255, 46, 99, 0.55) 40%
+    ),
+    conic-gradient(
+      from var(--holo-angle) at var(--mx) var(--my),
+      rgba(255, 46, 99, 0.5),
+      rgba(255, 209, 46, 0.45),
+      rgba(77, 255, 161, 0.4),
+      rgba(46, 197, 255, 0.45),
+      rgba(180, 77, 255, 0.45),
+      rgba(255, 46, 99, 0.5)
+    );
+  background-size:
+    200% 200%,
+    150% 150%;
+  background-position:
+    0% 50%,
+    var(--mx) var(--my);
+  mix-blend-mode: overlay;
+  filter: saturate(1.2) contrast(1.04);
+  animation:
+    holo-hue 6s linear infinite,
+    holo-sweep 7s ease-in-out infinite;
+  animation-play-state: paused, paused;
 }
 .cover.holo-on,
 .game-card:hover .cover,
 .game-card:focus-within .cover,
 .game-card.pad-focus .cover {
-  transform: perspective(700px) rotateX(3.5deg) rotateY(-3.5deg);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  transform: perspective(700px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.035);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 14px 32px rgba(0, 0, 0, 0.55),
+    0 0 26px rgba(10, 185, 230, 0.12);
 }
+.game-card:hover .cover,
+.game-card:focus-within .cover,
+.game-card.pad-focus .cover {
+  --rx: -3deg;
+  --ry: 3deg;
+}
+.cover.holo-on::before,
+.cover.holo-on::after,
 .game-card:hover .cover::before,
 .game-card:hover .cover::after,
 .game-card:focus-within .cover::before,
 .game-card:focus-within .cover::after,
 .game-card.pad-focus .cover::before,
 .game-card.pad-focus .cover::after {
-  opacity: 0.9;
+  opacity: 0.7;
 }
-.cover img,
-.cover .initials {
-  z-index: 1;
+.game-card:hover .cover::after,
+.game-card:focus-within .cover::after,
+.game-card.pad-focus .cover::after {
+  animation-play-state: running;
 }
-@media (prefers-reduced-motion: reduce), (pointer: coarse) {
-  .cover {
-    transform: none;
-    transition: none;
-    will-change: auto;
+.game-card:hover .cover img,
+.game-card:focus-within .cover img,
+.game-card.pad-focus .cover img {
+  filter: saturate(1.12) brightness(1.035);
+}
+.game-card:hover .cover::after,
+.game-card:focus-within .cover::after,
+.game-card.pad-focus .cover::after {
+  animation-play-state: running, running;
+}
+.cover.holo-on,
+.game-card:hover .cover,
+.game-card:focus-within .cover,
+.game-card.pad-focus .cover {
+  animation: cover-float 3.8s ease-in-out infinite;
+}
+@keyframes cover-float {
+  0%,
+  100% {
+    transform: perspective(700px) rotateX(calc(var(--rx) - 1.4deg)) rotateY(calc(var(--ry) + 1.4deg)) scale(1.035);
   }
-  .cover::before,
-  .cover::after {
-    display: none;
+  50% {
+    transform: perspective(700px) rotateX(calc(var(--rx) + 1.4deg)) rotateY(calc(var(--ry) - 1.4deg)) scale(1.035);
+  }
+}
+@keyframes holo-hue {
+  to {
+    filter: hue-rotate(360deg) saturate(1.2) contrast(1.04);
+  }
+}
+@keyframes holo-sweep {
+  0% {
+    background-position:
+      0% 50%,
+      var(--mx) var(--my);
+  }
+  50% {
+    background-position:
+      100% 50%,
+      var(--mx) var(--my);
+  }
+  100% {
+    background-position:
+      0% 50%,
+      var(--mx) var(--my);
   }
 }
 .cover img {
