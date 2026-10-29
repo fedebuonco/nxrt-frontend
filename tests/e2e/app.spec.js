@@ -74,7 +74,7 @@ test('game art tilts and lights up under the pointer', async ({ page }) => {
 
 test('focused game art tilts and lights up', async ({ page }) => {
   const cover = page.locator('.cover').first();
-  await page.locator('.game-card button.title').first().focus();
+  await page.locator('.game-card').first().focus();
   await page.waitForTimeout(250);
   const t = await cover.evaluate((el) => getComputedStyle(el).transform);
   expect(t).not.toBe('none');

@@ -248,19 +248,8 @@ import { ICONS } from './js/icons.js';
     `<span class="pill ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i>${esc(text)}</span>`;
   const tag = (text, kind) => `<span class="tag ${kind || ''}">${esc(text)}</span>`;
 
-  function shortLabel(label) {
-    return (
-      {
-        'Set up the game files': 'Set up',
-        'Build the game code': 'Build',
-        'Add its base game': 'Add base',
-        'Create a recomp': 'Create',
-      }[label] || label
-    );
-  }
-
   function metaLine(g) {
-    return [g.publisher, g.version ? `v${g.version}` : '', g.app_name].filter(Boolean).join('  ·  ');
+    return [g.publisher, g.version ? `v${g.version}` : ''].filter(Boolean).join('  ·  ');
   }
 
   function heroMeta(g) {
@@ -385,21 +374,22 @@ import { ICONS } from './js/icons.js';
     </div>`;
   }
 
+  function cardStatus(g) {
+    if (g.running) return g.running.playing ? 'Playing' : 'Working…';
+    if (!g.exe) return 'No app';
+    if (g.steps && g.steps.code) return 'Compiled';
+    if (g.steps && g.steps.generated) return 'Generated';
+    return g.state;
+  }
+
   function cardHtml(g) {
     const tone = g.running ? 'info' : g.tone;
-    const state = g.running ? (g.running.playing ? 'Playing' : 'Working…') : g.state;
-    const n = g.next;
-    const btn = n
-      ? `<button class="btn ${n.primary ? 'primary' : 'outline'} sm" data-act="next" data-key="${esc(g.key)}">${esc(shortLabel(n.label))}</button>`
-      : `<button class="btn secondary sm" data-act="open" data-key="${esc(g.key)}">Open</button>`;
-    return `<article class="game-card" data-card="${esc(g.key)}" aria-label="${esc(g.title)}">
+    const state = cardStatus(g);
+    return `<article class="game-card" data-card="${esc(g.key)}" data-act="open" data-key="${esc(g.key)}" tabindex="0" role="button">
       ${cover(g)}
-      <button class="title" data-act="open" data-key="${esc(g.key)}">${esc(g.title || 'Unknown game')}</button>
+      <div class="title">${esc(g.title || 'Unknown game')}</div>
       <div class="meta" title="${esc(metaLine(g))}">${esc(metaLine(g))}</div>
-      <div class="foot">
-        <span class="state ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i><span class="txt" title="${esc(state)}">${esc(state)}</span></span>
-        ${btn}
-      </div>
+      <span class="state ${toneClass(tone)}"><i class="dot ${toneClass(tone)}"></i><span class="txt" title="${esc(state)}">${esc(state)}</span></span>
     </article>`;
   }
 
@@ -1786,7 +1776,12 @@ import { ICONS } from './js/icons.js';
       case 'add-app':
         return addAppSheet();
       case 'open':
-        return go('game', el.dataset.key);
+        go('game', el.dataset.key);
+        setTimeout(() => {
+          const play = document.querySelector('.hero [data-act="play"]');
+          if (play && !play.disabled) setFocus(play);
+        }, 0);
+        return;
       case 'next':
         return runNext();
       case 'play':
@@ -2143,7 +2138,7 @@ import { ICONS } from './js/icons.js';
       ];
     } else if (S.view === 'library') {
       parts = [
-        hint(L.south, 'Open'),
+        hint(L.south, 'Select'),
         hint(L.west, 'Play'),
         hint(L.north, 'Info'),
         hint('LB / RB', 'Section'),

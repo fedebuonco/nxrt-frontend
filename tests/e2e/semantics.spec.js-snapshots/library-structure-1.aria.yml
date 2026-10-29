@@ -5,9 +5,5 @@
 - button "Scan games folder"
 - button "Add an nxrt app"
 - button "Add a Switch game"
-- article "Echoes of the Crown":
-  - text: ETC
-  - button "Echoes of the Crown"
-  - text: Demo Studio · v1.0.0 · Demo Recomp Ready to play
-  - button "Play"
+- button "ETC Echoes of the Crown Demo Studio · v1.0.0 Compiled"
 - button "Add a game Drop an .nsp or .xci anywhere on the window, or choose one Browse…"

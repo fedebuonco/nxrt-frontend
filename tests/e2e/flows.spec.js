@@ -12,13 +12,14 @@ async function open(page, answers = {}, snap = snapshot) {
 }
 
 async function openDemo(page) {
-  await page.locator('[data-card] .title').first().click();
+  await page.locator('[data-card]').first().click();
   await expect(page.getByRole('heading', { name: demo.title })).toBeVisible();
 }
 
 test('Play starts the game by its key', async ({ page }) => {
   await open(page);
   await openDemo(page);
+  await expect(page.locator('.hero [data-act="play"]')).toBeFocused();
   await page.locator('[data-act="play"], [data-act="next"]').first().click();
   await expect.poll(async () => (await calls(page, 'start_game')).length).toBe(1);
   const [c] = await calls(page, 'start_game');
