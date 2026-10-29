@@ -55,3 +55,19 @@ test('the donate link opens the support page', async ({ page }) => {
   await page.locator('[data-act="donate"]').click();
   await expect.poll(() => page.evaluate(() => window.__calls.some((c) => c.cmd === 'open_donate'))).toBe(true);
 });
+
+test('game art tilts and lights up under the pointer', async ({ page }) => {
+  const cover = page.locator('.cover').first();
+  await cover.hover({ position: { x: 20, y: 20 } });
+  await expect(cover).toHaveClass(/holo-on/);
+  const vars = await cover.evaluate((el) => ({
+    rx: el.style.getPropertyValue('--rx'),
+    ry: el.style.getPropertyValue('--ry'),
+    mx: el.style.getPropertyValue('--mx'),
+  }));
+  expect(vars.rx).not.toBe('');
+  expect(vars.ry).not.toBe('0.00deg');
+  expect(vars.mx).not.toBe('');
+  await page.mouse.move(1, 1);
+  await expect(cover).not.toHaveClass(/holo-on/);
+});

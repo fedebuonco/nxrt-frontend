@@ -278,6 +278,32 @@ import { ICONS } from './js/icons.js';
     return `<div class="cover">${initialsHtml}${img}</div>`;
   }
 
+  // A small holographic-card feel on game art: the cover tilts toward the pointer and a rainbow sheen follows it.
+  // Decorative only; no effect for reduced-motion users or touch pointers.
+  function decorateCovers() {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (const el of document.querySelectorAll('.cover')) {
+      if (el.dataset.holo) continue;
+      el.dataset.holo = '1';
+      el.addEventListener('pointermove', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        const r = el.getBoundingClientRect();
+        const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+        el.style.setProperty('--rx', `${((0.5 - y) * 12).toFixed(2)}deg`);
+        el.style.setProperty('--ry', `${((x - 0.5) * 12).toFixed(2)}deg`);
+        el.style.setProperty('--mx', `${(x * 100).toFixed(1)}%`);
+        el.style.setProperty('--my', `${(y * 100).toFixed(1)}%`);
+        el.classList.add('holo-on');
+      });
+      el.addEventListener('pointerleave', () => {
+        el.classList.remove('holo-on');
+        el.style.setProperty('--rx', '0deg');
+        el.style.setProperty('--ry', '0deg');
+      });
+    }
+  }
+
   function loadingHtml(text) {
     return `<div class="page"><div class="loading"><span class="spinner"></span>${esc(text)}</div></div>`;
   }
@@ -1310,6 +1336,7 @@ import { ICONS } from './js/icons.js';
     S.lastKey = S.key;
     main.scrollTop = same ? scroll : 0;
     hydrateIcons();
+    decorateCovers();
     hydrateLog();
     restoreDisc();
     renderPad();

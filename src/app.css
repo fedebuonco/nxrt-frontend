@@ -572,6 +572,72 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.045);
   display: grid;
   place-items: center;
+  --rx: 0deg;
+  --ry: 0deg;
+  --mx: 50%;
+  --my: 50%;
+  transform: perspective(700px) rotateX(var(--rx)) rotateY(var(--ry));
+  transform-style: preserve-3d;
+  transition:
+    transform 120ms ease-out,
+    box-shadow 180ms ease;
+  will-change: transform;
+}
+.cover::before,
+.cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.cover::before {
+  background: radial-gradient(
+    circle at var(--mx) var(--my),
+    rgba(255, 255, 255, 0.42),
+    rgba(255, 255, 255, 0.08) 28%,
+    transparent 58%
+  );
+  mix-blend-mode: screen;
+}
+.cover::after {
+  background: repeating-linear-gradient(
+    112deg,
+    rgba(255, 46, 99, 0.2) 0%,
+    rgba(255, 196, 0, 0.18) 10%,
+    rgba(70, 255, 160, 0.16) 20%,
+    rgba(0, 190, 255, 0.2) 30%,
+    rgba(180, 70, 255, 0.2) 40%,
+    rgba(255, 46, 99, 0.2) 50%
+  );
+  background-size: 220% 220%;
+  background-position: var(--mx) var(--my);
+  mix-blend-mode: color-dodge;
+  filter: saturate(1.25);
+}
+.cover.holo-on::before,
+.cover.holo-on::after {
+  opacity: 1;
+}
+.cover.holo-on {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+.cover img,
+.cover .initials {
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .cover {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+  .cover::before,
+  .cover::after {
+    display: none;
+  }
 }
 .cover img {
   position: absolute;
