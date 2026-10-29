@@ -81,3 +81,20 @@ test('focused game art tilts and lights up', async ({ page }) => {
   const sheen = await cover.evaluate((el) => getComputedStyle(el, '::after').opacity);
   expect(Number(sheen)).toBeGreaterThan(0);
 });
+
+test.describe('reduced motion', () => {
+  test.use({ reducedMotion: 'reduce' });
+
+  test('still shows the static foil and pointer tilt', async ({ page }) => {
+    await page
+      .locator('.cover')
+      .first()
+      .hover({ position: { x: 15, y: 15 } });
+    const cover = page.locator('.cover').first();
+    const t = await cover.evaluate((el) => getComputedStyle(el).transform);
+    expect(t).not.toBe('none');
+    await expect(cover).toHaveClass(/holo-on/);
+    const sheen = await cover.evaluate((el) => getComputedStyle(el, '::after').opacity);
+    expect(Number(sheen)).toBeGreaterThan(0);
+  });
+});

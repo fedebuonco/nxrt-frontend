@@ -281,7 +281,6 @@ import { ICONS } from './js/icons.js';
   // A small holographic-card feel on game art: the cover tilts toward the pointer and a rainbow sheen follows it.
   // Decorative only; no effect for reduced-motion users or touch pointers.
   function decorateCovers() {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const seen = new Set();
     const bind = (host, el) => {
       if (!el || seen.has(el)) return;
@@ -291,8 +290,8 @@ import { ICONS } from './js/icons.js';
         const r = el.getBoundingClientRect();
         const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
         const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-        el.style.setProperty('--rx', `${((0.5 - y) * 15).toFixed(2)}deg`);
-        el.style.setProperty('--ry', `${((x - 0.5) * 15).toFixed(2)}deg`);
+        el.style.setProperty('--rx', `${((0.5 - y) * 24).toFixed(2)}deg`);
+        el.style.setProperty('--ry', `${((x - 0.5) * 24).toFixed(2)}deg`);
         el.style.setProperty('--mx', `${(x * 100).toFixed(1)}%`);
         el.style.setProperty('--my', `${(y * 100).toFixed(1)}%`);
         el.style.setProperty('--holo-angle', `${(x * 180 + y * 90).toFixed(1)}deg`);

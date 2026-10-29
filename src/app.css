@@ -333,7 +333,7 @@ h1 {
   outline-offset: 2px;
 }
 .btn[disabled] {
-  opacity: 0.42;
+  opacity: 0.7;
   cursor: default;
   transform: none;
 }
@@ -631,8 +631,8 @@ h1 {
   background-position:
     0% 50%,
     var(--mx) var(--my);
-  mix-blend-mode: overlay;
-  filter: saturate(1.2) contrast(1.04);
+  mix-blend-mode: screen;
+  filter: saturate(1.35) contrast(1.04);
   animation:
     holo-hue 6s linear infinite,
     holo-sweep 7s ease-in-out infinite;
@@ -642,7 +642,7 @@ h1 {
 .game-card:hover .cover,
 .game-card:focus-within .cover,
 .game-card.pad-focus .cover {
-  transform: perspective(700px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.035);
+  transform: perspective(700px) rotateX(var(--rx)) rotateY(var(--ry)) scale(1.05);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.12),
     0 14px 32px rgba(0, 0, 0, 0.55),
@@ -662,7 +662,7 @@ h1 {
 .game-card:focus-within .cover::after,
 .game-card.pad-focus .cover::before,
 .game-card.pad-focus .cover::after {
-  opacity: 0.7;
+  opacity: 0.42;
 }
 .game-card:hover .cover::after,
 .game-card:focus-within .cover::after,
@@ -688,10 +688,10 @@ h1 {
 @keyframes cover-float {
   0%,
   100% {
-    transform: perspective(700px) rotateX(calc(var(--rx) - 1.4deg)) rotateY(calc(var(--ry) + 1.4deg)) scale(1.035);
+    transform: perspective(700px) rotateX(calc(var(--rx) - 2.2deg)) rotateY(calc(var(--ry) + 2.2deg)) scale(1.05);
   }
   50% {
-    transform: perspective(700px) rotateX(calc(var(--rx) + 1.4deg)) rotateY(calc(var(--ry) - 1.4deg)) scale(1.035);
+    transform: perspective(700px) rotateX(calc(var(--rx) + 2.2deg)) rotateY(calc(var(--ry) - 2.2deg)) scale(1.05);
   }
 }
 @keyframes holo-hue {
@@ -714,6 +714,23 @@ h1 {
     background-position:
       0% 50%,
       var(--mx) var(--my);
+  }
+}
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .cover,
+  .cover.holo-on,
+  .game-card:hover .cover,
+  .game-card:focus-within .cover,
+  .game-card.pad-focus .cover {
+    animation: none;
+    transition: none;
+  }
+  .cover::before,
+  .cover::after {
+    transition: none;
+  }
+  .cover::after {
+    animation: none;
   }
 }
 .cover img {
