@@ -2,3 +2,7 @@
 	path = nxrt
 	url = https://github.com/fedebuonco/nxrt.git
 	branch = master
+[submodule "nxnative"]
+	path = nxnative
+	url = https://github.com/seedds/nxnative.git
+	branch = main

@@ -54,10 +54,10 @@ and forth.
 
 The nxnative build works in `<NSP folder>/<title id>_build`, so the game's NSP folder has to be on an APFS volume: on
 exFAT or FAT, macOS writes a `._<name>` file beside every file and nxnative's tools read those as game files. It needs
-Python 3, Homebrew's `spirv-cross` and `glslangValidator`, and .NET.
+Python 3.12 or newer, Homebrew's `spirv-cross` and `glslangValidator`, and .NET.
 
-The nxnative checkout is `NXNATIVE_DIR` if set, else the path in **Settings → nxnative**, else the copy on the
-development volume (`/Volumes/FE3HDev/nxnative`).
+The nxnative checkout is `NXNATIVE_DIR` if set, else the path in **Settings → nxnative**, else the frontend's
+`nxnative` submodule.
 
 ## Controller and keyboard
 

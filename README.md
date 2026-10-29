@@ -34,7 +34,7 @@ game's cover read from your package._
 ## Build
 
 macOS 11+ (Apple silicon for the bundled build), **Rust 1.90+ via rustup**, **Node 20.19+**, the Xcode command-line
-tools, and the `nxrt` submodule.
+tools, and the `nxrt` and `nxnative` submodules.
 
 ```sh
 git clone --recursive git@github.com:fedebuonco/nxrt-frontend.git

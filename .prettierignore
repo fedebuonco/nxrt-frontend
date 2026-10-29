@@ -4,6 +4,7 @@ dist
 src-tauri/target
 src-tauri/nxrt
 nxrt
+nxnative
 assets
 package-lock.json
 

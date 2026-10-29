@@ -2,7 +2,9 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['web-dist/**', 'dist/**', 'node_modules/**', 'src-tauri/**', 'nxrt/**', 'assets/**'] },
+  {
+    ignores: ['web-dist/**', 'dist/**', 'node_modules/**', 'src-tauri/**', 'nxrt/**', 'nxnative/**', 'assets/**'],
+  },
   js.configs.recommended,
   {
     files: ['tests/**/*.js'],

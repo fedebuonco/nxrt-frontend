@@ -19,7 +19,7 @@ src-tauri/src/
   commands.rs            the window's commands + the run monitor
   api.rs                 serialisable models gathered from the game's app
   library.rs runner.rs controls.rs pads.rs issues.rs logging.rs update.rs ...
-  nxnative.rs            the second backend: its checkout, its build folder, its build and run commands
+  nxnative.rs            the second backend: its submodule/checkout, its build folder, its build and run commands
   build.rs               builds libnxrt_manage from the nxrt submodule
 vite.config.js           root src/, output web-dist/, dev port 1420
 ```
