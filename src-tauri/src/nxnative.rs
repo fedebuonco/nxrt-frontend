@@ -5,24 +5,55 @@
 use crate::library::Entry;
 use std::path::{Path, PathBuf};
 
-/// Where the nxnative checkout is: NXNATIVE_DIR, else the library's setting, else the SSD's development volume.
+/// Where the nxnative checkout is: NXNATIVE_DIR, else the library's setting, else this checkout's own submodule.
 pub fn repo(setting: Option<&Path>) -> PathBuf {
     if let Some(d) = std::env::var_os("NXNATIVE_DIR") {
         return PathBuf::from(d);
     }
-    setting
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("/Volumes/FE3HDev/nxnative"))
+    setting.map(Path::to_path_buf).unwrap_or_else(source_repo)
 }
 
-/// The Python the build runs with: the checkout's own environment (lz4, capstone, fonttools), else python3.
+fn source_repo() -> PathBuf {
+    let p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../nxnative"));
+    p.canonicalize().unwrap_or(p)
+}
+
+/// The Python the build runs with: the checkout's own environment (lz4, capstone, fonttools), else the first
+/// Python 3.12+ on the caller's PATH or in Homebrew. Never pick Apple's 3.9 just because the build PATH puts it first.
 pub fn python(repo: &Path) -> PathBuf {
     let venv = repo.join(".venv/bin/python");
     if venv.is_file() {
-        venv
-    } else {
-        PathBuf::from("python3")
+        return venv;
     }
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let candidates = std::env::split_paths(&path)
+        .map(|d| d.join("python3"))
+        .chain(
+            [
+                "/opt/homebrew/bin/python3",
+                "/usr/local/bin/python3",
+                "/usr/bin/python3",
+            ]
+            .into_iter()
+            .map(PathBuf::from),
+        );
+    compatible_python(candidates).unwrap_or_else(|| PathBuf::from("python3"))
+}
+
+fn compatible_python(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    candidates.into_iter().find(|p| {
+        p.is_file()
+            && std::process::Command::new(p)
+                .args([
+                    "-c",
+                    "import sys; raise SystemExit(sys.version_info < (3, 12))",
+                ])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
+    })
 }
 
 /// The PATH the build runs with: Apple's tools first (nxnative's host Makefile calls `clang`, and a Homebrew LLVM
@@ -169,5 +200,25 @@ mod tests {
         assert!(super::unsuitable(std::path::Path::new("/")).is_none());
         // (Apple's clang before any other: /usr/bin is first)
         assert!(p.starts_with("/usr/bin:"), "{p}");
+    }
+
+    #[test]
+    fn the_source_checkout_is_the_frontend_submodule() {
+        let repo = super::source_repo();
+        assert!(
+            repo.ends_with("nxrt-frontend/nxnative"),
+            "{}",
+            repo.display()
+        );
+        assert!(repo.join("scripts/build_ipa_from_nsp.py").is_file());
+    }
+
+    #[test]
+    fn python_selection_skips_an_incompatible_interpreter() {
+        let candidates = ["/usr/bin/false", "/usr/bin/true"].map(std::path::PathBuf::from);
+        assert_eq!(
+            super::compatible_python(candidates),
+            Some(std::path::PathBuf::from("/usr/bin/true"))
+        );
     }
 }

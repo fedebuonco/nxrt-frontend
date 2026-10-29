@@ -102,7 +102,7 @@ pub struct Library {
     pub controls: Controls,
     #[serde(default, rename = "game")]
     pub games: Vec<Entry>,
-    /// the nxnative checkout (nxnative.rs repo: NXNATIVE_DIR, else this, else the SSD's development volume)
+    /// the nxnative checkout (nxnative.rs repo: NXNATIVE_DIR, else this, else the frontend's submodule)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nxnative_dir: Option<PathBuf>,
     /// (not saved) the library file could not be read: where it was moved, so nothing overwrites it
