@@ -71,3 +71,13 @@ test('game art tilts and lights up under the pointer', async ({ page }) => {
   await page.mouse.move(1, 1);
   await expect(cover).not.toHaveClass(/holo-on/);
 });
+
+test('focused game art tilts and lights up', async ({ page }) => {
+  const cover = page.locator('.cover').first();
+  await page.locator('.game-card button.title').first().focus();
+  await page.waitForTimeout(250);
+  const t = await cover.evaluate((el) => getComputedStyle(el).transform);
+  expect(t).not.toBe('none');
+  const sheen = await cover.evaluate((el) => getComputedStyle(el, '::after').opacity);
+  expect(Number(sheen)).toBeGreaterThan(0);
+});

@@ -621,8 +621,20 @@ h1 {
 .cover.holo-on::after {
   opacity: 1;
 }
-.cover.holo-on {
+.cover.holo-on,
+.game-card:hover .cover,
+.game-card:focus-within .cover,
+.game-card.pad-focus .cover {
+  transform: perspective(700px) rotateX(3.5deg) rotateY(-3.5deg);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+.game-card:hover .cover::before,
+.game-card:hover .cover::after,
+.game-card:focus-within .cover::before,
+.game-card:focus-within .cover::after,
+.game-card.pad-focus .cover::before,
+.game-card.pad-focus .cover::after {
+  opacity: 0.9;
 }
 .cover img,
 .cover .initials {
